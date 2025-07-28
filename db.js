@@ -91,10 +91,12 @@ async function saveMessage(userId, username, messageContent) {
 // Function to get the latest chat messages (global)
 async function getLatestMessages(limit = 100) {
     try {
-        const [rows] = await pool.execute(
+        // CHANGED from pool.execute to pool.query
+        const [rows] = await pool.query(
             'SELECT username, message_content, timestamp FROM global_messages ORDER BY timestamp DESC LIMIT ?',
             [limit]
         );
+        console.log('Fetched latest global messages.');
         return rows.reverse(); // Return in ascending order (oldest first)
     } catch (error) {
         console.error('Error getting latest global messages:', error.message);
@@ -119,7 +121,8 @@ async function savePrivateMessage(senderId, receiverId, messageContent) {
 // Function to get private message history between two users
 async function getPrivateMessageHistory(user1Id, user2Id, limit = 50) {
     try {
-        const [rows] = await pool.execute(
+        // CHANGED from pool.execute to pool.query
+        const [rows] = await pool.query(
             `SELECT
                 pm.message_content,
                 pm.timestamp,
@@ -141,7 +144,7 @@ async function getPrivateMessageHistory(user1Id, user2Id, limit = 50) {
         );
         return rows;
     }
-     catch (error) {
+      catch (error) {
         console.error('Error getting private message history:', error.message);
         throw error;
     }
