@@ -1,17 +1,17 @@
 // db.js
 const mysql = require('mysql2/promise');
-require('dotenv').config(); // Load environment variables here
+// Remove: require('dotenv').config(); // Render automatically handles env vars, no need for dotenv
 
-const pool = mysql.createPool({
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '', // Use DB_PASSWORD from .env
-    database: process.env.DB_NAME || 'chat_app',
-    port: process.env.DB_PORT || 3306, // Use DB_PORT from .env, fallback to 3306
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
-});
+// Get the full DATABASE_URL from environment variables
+const dbConnectionString = process.env.DATABASE_URL;
+
+// Ensure the DATABASE_URL is set before attempting to connect
+if (!dbConnectionString) {
+    console.error('❌ FATAL: DATABASE_URL environment variable is not set!');
+    process.exit(1); // Exit if no DB connection string is found
+}
+
+const pool = mysql.createPool(dbConnectionString); // Pass the full URL directly to createPool
 
 // Test the connection
 pool.getConnection()
@@ -20,9 +20,11 @@ pool.getConnection()
         connection.release(); // Release the connection immediately after testing
     })
     .catch(err => {
-        console.error('❌ Error connecting to MySQL database:', err.message);
+        console.error('❌ Error connecting to MySQL database:', err.message); // This will now show the specific error
         process.exit(1); // Exit the process if unable to connect to the database
     });
+
+// ... (rest of your functions remain the same) ...
 
 // Function to register a new user
 async function registerUser(username, hashedPassword) {
@@ -138,7 +140,8 @@ async function getPrivateMessageHistory(user1Id, user2Id, limit = 50) {
             [user1Id, user2Id, user2Id, user1Id, limit]
         );
         return rows;
-    } catch (error) {
+    }
+     catch (error) {
         console.error('Error getting private message history:', error.message);
         throw error;
     }
@@ -207,7 +210,7 @@ module.exports = {
     pool,
     registerUser,
     findUserByUsername,
-    saveUserPreferences, // <--- THIS WAS THE MISSING EXPORT
+    saveUserPreferences,
     saveMessage,
     getLatestMessages,
     savePrivateMessage,
