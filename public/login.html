@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login to Bychat</title>
+
+     <link rel="icon" type="image/png" sizes="16x16" href="/favicon.jpg">
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #121212;
+            color: #f1f1f1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow: hidden; /* Prevent scrollbar during splash screen */
+        }
+        .container {
+            background: #1e1e1e;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+        h2 {
+            margin-bottom: 25px;
+            color: #007bff;
+        }
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        input[type="text"],
+        input[type="password"] {
+            width: calc(100% - 20px);
+            padding: 12px;
+            border: 1px solid #333;
+            border-radius: 5px;
+            background: #2e2e2e;
+            color: #f1f1f1;
+            font-size: 16px;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+
+        /* --- TOAST NOTIFICATION STYLES --- */
+        #message {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 15px 25px;
+            border-radius: 8px;
+            font-weight: bold;
+            color: white;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.5s ease, visibility 0.5s ease, transform 0.5s ease;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            min-width: 250px;
+            text-align: center;
+        }
+        #message.show {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(-50%) translateY(0);
+        }
+        #message.success {
+            background-color: #28a745;
+        }
+        #message.error {
+            background-color: #dc3545;
+        }
+        /* --- END TOAST NOTIFICATION STYLES --- */
+
+        /* --- WELCOME SCREEN STYLES --- */
+        #welcomeScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #121212; /* Match body background */
+            display: flex;
+            flex-direction: column; /* Arrange logo and text vertically */
+            justify-content: center;
+            align-items: center;
+            z-index: 2000; /* Higher than toast */
+            color: #f1f1f1;
+            font-size: 2.5em; /* Large text */
+            transition: opacity 1s ease-out, visibility 1s ease-out;
+            opacity: 1;
+            visibility: visible;
+        }
+        #welcomeScreen.fade-out {
+            opacity: 0;
+            visibility: hidden;
+        }
+        #splashLogo {
+            max-width: 200px; /* Adjust as needed for your logo size */
+            height: auto;
+            margin-bottom: 20px; /* Space between logo and text */
+        }
+        /* --- END WELCOME SCREEN STYLES --- */
+
+        /* --- LOGIN CONTENT INITIAL STATE & TRANSITION --- */
+        #loginContent {
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 1s ease-in, visibility 1s ease-in;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            width: 100%;
+        }
+        #loginContent.show-content {
+            opacity: 1;
+            visibility: visible;
+        }
+        /* --- END LOGIN CONTENT STYLES --- */
+
+        p {
+            margin-top: 25px;
+        }
+        p a {
+            color: #007bff;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        p a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div id="welcomeScreen">
+        <img src="/logo.ico" alt="Bychat Logo" id="splashLogo">  <h1 style="color:blue">Bychat</h1>
+       
+    </div>
+
+    <div id="loginContent">
+        <div class="container">
+            <h2>Login</h2>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="username">Username:</label>
+                    <input type="text" id="username" name="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password:</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                <button type="submit">Login</button>
+            </form>
+            <div id="message"></div>
+            <p>Don't have an account? <a href="/signup.html">Sign Up</a></p>
+        </div>
+    </div>
+
+    <script>
+        const welcomeScreen = document.getElementById('welcomeScreen');
+        const loginContent = document.getElementById('loginContent');
+        const loginForm = document.getElementById('loginForm');
+        const messageDiv = document.getElementById('message');
+        let hideMessageTimeout; // For toast notifications
+
+        // --- Splash Screen Logic ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const splashDuration = 3000; // 3 seconds for the welcome message
+
+            setTimeout(() => {
+                welcomeScreen.classList.add('fade-out'); // Start fade-out of welcome screen
+                welcomeScreen.addEventListener('transitionend', () => {
+                    welcomeScreen.style.display = 'none'; // Completely hide after transition
+                    loginContent.classList.add('show-content'); // Show login content
+                }, { once: true }); // Ensure listener runs only once
+            }, splashDuration);
+        });
+
+        // --- Login Form Submission Logic (unchanged from previous toast implementation) ---
+        loginForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage('Login successful! Redirecting to chat...', 'success');
+                    setTimeout(() => {
+                        window.location.href = '/chat.html';
+                    }, 2000);
+                } else {
+                    showMessage(data.message || 'Login failed.', 'error');
+                }
+            } catch (error) {
+                console.error('Error during login:', error);
+                showMessage('An unexpected error occurred. Please try again.', 'error');
+            }
+        });
+
+        // --- Toast Notification Logic (unchanged) ---
+        function showMessage(msg, type) {
+            if (hideMessageTimeout) {
+                clearTimeout(hideMessageTimeout);
+            }
+
+            messageDiv.textContent = msg;
+            messageDiv.className = type;
+            messageDiv.classList.add('show');
+
+            hideMessageTimeout = setTimeout(() => {
+                messageDiv.classList.remove('show');
+                messageDiv.addEventListener('transitionend', function handler() {
+                    messageDiv.textContent = '';
+                    messageDiv.className = '';
+                    messageDiv.removeEventListener('transitionend', handler);
+                }, { once: true });
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Up for Chat</title>
+
+     <link rel="icon" type="image/png/ico" sizes="16x16" href="/logo.ico">
+ 
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #121212;
+            color: #f1f1f1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background: #1e1e1e;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+        h2 {
+            margin-bottom: 25px;
+            color: #28a745;
+        }
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        input[type="text"],
+        input[type="password"] {
+            width: calc(100% - 20px);
+            padding: 12px;
+            border: 1px solid #333;
+            border-radius: 5px;
+            background: #2e2e2e;
+            color: #f1f1f1;
+            font-size: 16px;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+        button:hover {
+            background: #218838;
+        }
+
+        /* --- TOAST NOTIFICATION STYLES --- */
+        #message {
+            position: fixed; /* Keep it in place when scrolling */
+            top: 20px;       /* 20px from the top */
+            left: 50%;       /* Center horizontally */
+            transform: translateX(-50%); /* Adjust for exact centering */
+            padding: 15px 25px;
+            border-radius: 8px;
+            font-weight: bold;
+            color: white;
+            z-index: 1000; /* Ensure it's on top of other content */
+            opacity: 0;      /* Start invisible */
+            visibility: hidden; /* Hide from screen readers when not visible */
+            transition: opacity 0.5s ease, visibility 0.5s ease, transform 0.5s ease; /* Smooth transitions */
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            min-width: 250px;
+            text-align: center;
+        }
+
+        #message.show {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(-50%) translateY(0); /* Optional: slight slide-down effect */
+        }
+
+        #message.success {
+            background-color: #28a745; /* Green for success */
+        }
+
+        #message.error {
+            background-color: #dc3545; /* Red for error */
+        }
+        /* --- END TOAST NOTIFICATION STYLES --- */
+
+        p {
+            margin-top: 25px;
+        }
+        p a {
+            color: #28a745;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        p a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Sign Up</h2>
+        <form id="signupForm">
+            <div class="form-group">
+                <label for="username">Username:</label>
+                <input type="text" id="username" name="username" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <button type="submit">Sign Up</button>
+        </form>
+        <div id="message"></div> <p>Already have an account? <a href="/login.html">Login</a></p>
+    </div>
+
+    <script>
+        const signupForm = document.getElementById('signupForm');
+        const messageDiv = document.getElementById('message'); // Get the message div
+
+        // This will hold the timeout ID so we can clear it if a new message appears
+        let hideMessageTimeout;
+
+        signupForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const response = await fetch('/signup', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage('Registration successful! Redirecting to chat...', 'success');
+                    setTimeout(() => {
+                        window.location.href = '/chat.html'; // Redirect to chat.html
+                    }, 2000); // Give user time to read toast before redirect
+                } else {
+                    showMessage(data.message || 'Registration failed.', 'error');
+                }
+            } catch (error) {
+                console.error('Error during signup:', error);
+                showMessage('An unexpected error occurred. Please try again.', 'error');
+            }
+        });
+
+        // Updated showMessage function for toast behavior
+        function showMessage(msg, type) {
+            // Clear any existing hide timeout to prevent conflicts
+            if (hideMessageTimeout) {
+                clearTimeout(hideMessageTimeout);
+            }
+
+            messageDiv.textContent = msg;
+            messageDiv.className = type; // Set class for styling (success/error)
+
+            // Add 'show' class to trigger fade-in and visibility
+            messageDiv.classList.add('show');
+
+            // Set timeout to hide the message after 3 seconds
+            hideMessageTimeout = setTimeout(() => {
+                messageDiv.classList.remove('show'); // Trigger fade-out
+                // After fade-out, clear content and remove class for cleanliness
+                // This 'transitionend' event is more robust than a fixed timeout
+                messageDiv.addEventListener('transitionend', function handler() {
+                    messageDiv.textContent = '';
+                    messageDiv.className = ''; // Remove all classes
+                    messageDiv.removeEventListener('transitionend', handler);
+                });
+            }, 3000); // Message visible for 3 seconds
+        }
+    </script>
+</body>
+</html>
