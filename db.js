@@ -135,24 +135,27 @@ async function saveMessage(userId, username, messageContent) {
     }
 }
 
-// --- MODIFIED: Function to get the latest chat messages (global) ---
 async function getLatestMessages(limit = 100) {
     try {
+        // Fix: Use template literal backticks for the console.log string
+        console.log(`DEBUG: getLatestMessages received limit: ${limit}, type: ${typeof limit}`);
 
-        limit = parseInt(limit, 10); // Ensure limit is an integer
-        if (isNaN(limit) || limit <= 0) {
-            limit = 100; // Default to 100 if limit is invalid
+        // Ensure limit is an integer and positive for safety
+        let safeLimit = parseInt(limit, 10); // Use a new variable name like 'safeLimit'
+        if (isNaN(safeLimit) || safeLimit <= 0) {
+            safeLimit = 100; // Default to 100 if limit is invalid
         }
+
         const [rows] = await db.execute(
-            'SELECT username, message_content, timestamp FROM global_messages ORDER BY timestamp DESC LIMIT ?',
-            [limit]
+            'SELECT username, message_content, timestamp FROM global_messages ORDER BY timestamp DESC LIMIT ?', // Use '?' for the placeholder
+            [safeLimit] // <--- CRITICAL FIX: Pass 'safeLimit' wrapped in an array!
         );
         console.log('Fetched latest global messages.');
         return rows.reverse(); // Return in ascending order (oldest first)
     } catch (error) {
         console.error('Error getting latest global messages:', error.message);
-        throw error;
-    }
+        throw error;
+    }
 }
 
 // Function to save a private message
