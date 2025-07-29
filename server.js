@@ -340,12 +340,7 @@ async function sendTotalUnreadCountToUser(userId) {
 io.on('connection', async (socket) => {
     const session = socket.handshake.session;
 
-    // --- ADDED DETAILED LOGGING HERE ---
-    console.log('--- Socket.IO Connection Attempt ---');
-    console.log('socket.handshake.session:', session);
-    console.log('socket.handshake.session.user:', session ? session.user : 'Session object is null/undefined');
-    console.log('socket.handshake.headers.cookie:', socket.handshake.headers.cookie);
-    // --- END DETAILED LOGGING ---
+   
 
     if (!session.user || !session.user.id) {
         console.log('Unauthenticated socket attempted connection, disconnecting...');
