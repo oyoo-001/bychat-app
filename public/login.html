@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login to Bychat</title>
 
-     <link rel="icon" type="image/png" sizes="16x16" href="/favicon.jpg">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon.jpg">
 
     <style>
         body {
@@ -27,6 +27,8 @@
             width: 100%;
             max-width: 400px;
             text-align: center;
+            /* Added/Updated: Adjust padding to prevent footer overlap */
+            padding-bottom: 0px; /* Adjust this value if your footer height changes */
         }
         h2 {
             margin-bottom: 25px;
@@ -156,12 +158,30 @@
         p a:hover {
             text-decoration: underline;
         }
+
+        /* --- NEW FOOTER STYLES --- */
+        #pageFooter {
+            position: fixed; /* Positions it relative to the viewport */
+            bottom: 0;       /* Aligns to the bottom edge of the viewport */
+            left: 0;         /* Aligns to the left edge of the viewport */
+            width: 100%;     /* Makes it span the full width of the viewport */
+            background-color: #1e1e1e; /* Match your container's background or choose a suitable dark color */
+            color: #f1f1f1;
+            padding: 15px 0; /* Vertical padding, no horizontal padding as width is 100% */
+            text-align: center;
+            z-index: 999;    /* Ensure it's above other page content, but below welcome screen's 2000 */
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3); /* Optional: subtle shadow at the top edge */
+        }
+
+        #pageFooter p {
+            margin: 0; /* Remove default paragraph margins */
+            font-size: 0.9em; /* Make the text slightly smaller for a footer */
+        }
     </style>
 </head>
 <body>
     <div id="welcomeScreen">
-        <img src="/logo.ico" alt="Bychat Logo" id="splashLogo">  <h1 style="color:blue">Bychat</h1>
-       
+        <img src="/logo.ico" alt="Bychat Logo" id="splashLogo"> <h1 style="color:blue">Bychat</h1>
     </div>
 
     <div id="loginContent">
@@ -182,6 +202,10 @@
             <p>Don't have an account? <a href="/signup.html">Sign Up</a></p>
         </div>
     </div>
+
+    <footer id="pageFooter">
+        <p>&copy; 2025 | Byron's Tech | Developed by Eng. Byron Okoth</p>
+    </footer>
 
     <script>
         const welcomeScreen = document.getElementById('welcomeScreen');
@@ -255,5 +279,6 @@
             }, 3000);
         }
     </script>
+
 </body>
 </html>
