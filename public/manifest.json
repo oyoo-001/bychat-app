@@ -1,0 +1,22 @@
+{
+  "name": "Bychat App",
+  "short_name": "Bychat",
+  "description": "Your secure and real-time chat application.",
+  "start_url": "/chat.html",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#28a745",
+  "icons": [
+    {
+      "src": "/logo.ico",
+      "sizes": "100x100",
+      "type": "image/png"
+    },
+    {
+      "src": "/images/vecteezy_massage-icon-3d-render_37297442.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+    
+  ]
+}
