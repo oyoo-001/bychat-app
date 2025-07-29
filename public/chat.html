@@ -1229,14 +1229,14 @@
                 socket.emit('request-global-history');
                 setActiveUserItem('global');
                 voiceChatButton.style.display = 'none';
-               
+
             } else {
                 chatTitle.textContent = `Chat with ${targetUser.username}`;
                 socket.emit('request-private-history', targetUser.id);
                 setActiveUserItem(targetUser.id);
                 socket.emit('mark-private-messages-read', targetUser.id);
                 voiceChatButton.style.display = '';
-                fileUploadButton.style.display = '';
+
             }
             if (window.innerWidth <= 768) {
                 sidebar.classList.remove('open');
@@ -1648,13 +1648,70 @@
             }
         });
 
-        // Load saved settings from the server on app load
-        async function loadUserSettings() {
-            try {
-                const response = await fetch('/api/user/settings');
-                const data = await response.json();
-                if (data.success && data.settings) {
-                    const { theme_preference, chat_background_image_url } = data.settings;
+      // public/chat.html (or public/js/chat.js)
+
+async function loadUserSettings() {
+    try {
+        // Change the URL to fetch from your /session endpoint
+        const response = await fetch('/session');
+        const data = await response.json();
+
+        // The /session endpoint returns loggedIn, username, userId,
+        // theme_preference, and chat_background_image_url directly on the data object.
+        if (data.loggedIn) {
+            const { theme_preference, chat_background_image_url } = data; // Destructure directly from data
+
+            // --- Apply Theme Preference ---
+            const themeLink = document.getElementById('theme-link');
+            if (themeLink && theme_preference) {
+                // Ensure your theme preference matches your CSS file names
+                // e.g., 'dark' for css/theme-dark.css, 'light' for css/theme-light.css
+                themeLink.href = `/css/theme-${theme_preference}.css`;
+                console.log(`Applied theme: ${theme_preference}`);
+            } else if (themeLink) {
+                // If no specific theme preference is set, reset to default (e.g., style.css or theme-light.css)
+                themeLink.href = '/css/style.css'; // Or your default light theme CSS path
+                console.log('Applied default theme (no preference set).');
+            }
+
+
+            // --- Apply Chat Background Image ---
+            const chatBox = document.getElementById('chat-box'); // Ensure you have an element with id="chat-box"
+            if (chatBox) {
+                if (chat_background_image_url) {
+                    chatBox.style.backgroundImage = `url(${chat_background_image_url})`;
+                    chatBox.style.backgroundSize = 'cover';
+                    chatBox.style.backgroundPosition = 'center';
+                    chatBox.style.backgroundAttachment = 'fixed'; // Optional: for parallax-like effect
+                    console.log(`Applied background image: ${chat_background_image_url}`);
+                } else {
+                    chatBox.style.backgroundImage = ''; // Clear if no background URL
+                    console.log('Cleared chat background image.');
+                }
+            }
+
+            // You might want to store these preferences in client-side storage
+            // (e.g., localStorage) so they apply instantly on subsequent visits
+            // before the server response, but the server is the source of truth.
+
+        } else {
+            // If the /session endpoint indicates not logged in, it means the server
+            // didn't recognize the session cookie. Your server already redirects
+            // /chat.html to /login.html in this case, so explicit client-side
+            // redirection here might be redundant but safe as a fallback.
+            console.log('User not logged in according to /session endpoint. Server should redirect.');
+            // If you want a client-side fallback redirect, uncomment:
+            // window.location.href = '/login.html';
+        }
+
+    } catch (error) {
+        console.error('Error fetching user settings or applying preferences:', error);
+        // Important: Do NOT redirect to login here. This catch block handles
+        // network errors or parsing errors, not session invalidation.
+        // The /session check at the start of /chat.html route in server.js
+        // is responsible for redirecting unauthenticated users.
+    }
+}
 
                     // Apply Theme
                     if (theme_preference) {
