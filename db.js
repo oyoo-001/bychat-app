@@ -140,9 +140,10 @@ async function saveMessage(userId, username, messageContent) {
 // Function to get the latest chat messages (global)
 async function getLatestMessages(limit = 100) {
     try {
-        const [rows] = await db.execute( // Using db.execute
+        // --- FIX APPLIED HERE: Pass limit as an array to db.execute ---
+        const [rows] = await db.execute(
             'SELECT username, message_content, timestamp FROM global_messages ORDER BY timestamp DESC LIMIT ?',
-            [limit]
+            [limit] // <--- THIS WAS THE CHANGE NEEDED
         );
         console.log('Fetched latest global messages.');
         return rows.reverse(); // Return in ascending order (oldest first)
