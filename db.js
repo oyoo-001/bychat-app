@@ -135,22 +135,13 @@ async function saveMessage(userId, username, messageContent) {
     }
 }
 
+// Function to get the latest chat messages (global)
 async function getLatestMessages(limit = 100) {
     try {
-        // Fix: Use template literal backticks for the console.log string
-        console.log(`DEBUG: getLatestMessages received limit: ${limit}, type: ${typeof limit}`);
-
-        // Ensure limit is an integer and positive for safety
-        let safeLimit = parseInt(limit, 10); // Use a new variable name like 'safeLimit'
-        if (isNaN(safeLimit) || safeLimit <= 0) {
-            safeLimit = 100; // Default to 100 if limit is invalid
-        }
-
-        const [rows] = await db.execute(
-            'SELECT username, message_content, timestamp FROM global_messages ORDER BY timestamp DESC LIMIT ?', // Use '?' for the placeholder
-            [safeLimit] // <--- CRITICAL FIX: Pass 'safeLimit' wrapped in an array!
+        const [rows] = await pool.execute(
+            'SELECT username, message_content, timestamp FROM global_messages ORDER BY timestamp DESC LIMIT ?',
+            [limit]
         );
-        console.log('Fetched latest global messages.');
         return rows.reverse(); // Return in ascending order (oldest first)
     } catch (error) {
         console.error('Error getting latest global messages:', error.message);
@@ -161,7 +152,7 @@ async function getLatestMessages(limit = 100) {
 // Function to save a private message
 async function savePrivateMessage(senderId, receiverId, messageContent) {
     try {
-        const [result] = await db.execute(
+        const [result] = await pool.execute(
             'INSERT INTO private_messages (sender_id, receiver_id, message_content, is_read) VALUES (?, ?, ?, FALSE)',
             [senderId, receiverId, messageContent]
         );
@@ -172,11 +163,10 @@ async function savePrivateMessage(senderId, receiverId, messageContent) {
     }
 }
 
-// --- MODIFIED: Function to get private message history between two users ---
+// Function to get private message history between two users
 async function getPrivateMessageHistory(user1Id, user2Id, limit = 50) {
     try {
-        console.log(`DEBUG: getPrivateMessageHistory received limit: ${limit}, type: ${typeof limit}`);
-        const [rows] = await db.execute( // Using db.execute
+        const [rows] = await pool.execute(
             `SELECT
                 pm.message_content,
                 pm.timestamp,
@@ -194,7 +184,7 @@ async function getPrivateMessageHistory(user1Id, user2Id, limit = 50) {
             ORDER BY
                 pm.timestamp ASC
             LIMIT ?`,
-            [user1Id, user2Id, user2Id, user1Id, limit] // CRITICAL FIX: Ensure all parameters are in this array
+            [user1Id, user2Id, user2Id, user1Id, limit]
         );
         return rows;
     } catch (error) {
@@ -202,7 +192,6 @@ async function getPrivateMessageHistory(user1Id, user2Id, limit = 50) {
         throw error;
     }
 }
-
 // Function to get unread counts for a specific user from all other users
 async function getUnreadCountsForUser(userId) {
     try {
