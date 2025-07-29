@@ -141,6 +141,7 @@ async function saveMessage(userId, username, messageContent) {
 async function getLatestMessages(limit = 100) {
     try {
         // --- FIX APPLIED HERE: Pass limit as an array to db.execute ---
+         console.log(`DEBUG: getLatestMessages received limit: ${limit}, type: ${typeof limit}`); // <-- ADD THIS LINE
         const [rows] = await db.execute(
             'SELECT username, message_content, timestamp FROM global_messages ORDER BY timestamp DESC LIMIT ?',
             [limit] // <--- THIS WAS THE CHANGE NEEDED
