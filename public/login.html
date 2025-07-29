@@ -165,12 +165,14 @@
             bottom: 0;       /* Aligns to the bottom edge of the viewport */
             left: 0;         /* Aligns to the left edge of the viewport */
             width: 100%;     /* Makes it span the full width of the viewport */
+            height: 5px;
             background-color: #1e1e1e; /* Match your container's background or choose a suitable dark color */
             color: #f1f1f1;
             padding: 15px 0; /* Vertical padding, no horizontal padding as width is 100% */
             text-align: center;
             z-index: 999;    /* Ensure it's above other page content, but below welcome screen's 2000 */
             box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3); /* Optional: subtle shadow at the top edge */
+
         }
 
         #pageFooter p {
@@ -199,7 +201,8 @@
                 <button type="submit">Login</button>
             </form>
             <div id="message"></div>
-            <p>Don't have an account? <a href="/signup.html">Sign Up</a></p>
+           <p>Don't have an account? <a href="/signup.html">Sign Up</a></p>
+<p><a href="/forgot-password.html">Forgot Password?</a></p>
         </div>
     </div>
 
