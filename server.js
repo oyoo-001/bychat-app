@@ -65,7 +65,7 @@ const sessionMiddleware = session({
         maxAge: 1000 * 60 * 60 * 24, // 24 hours
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production', // Use secure cookies in production (HTTPS)
-        sameSite: 'Lax' // Recommended for modern browsers
+        sameSite: 'None' // Recommended for modern browsers
     },
 });
 
@@ -153,7 +153,7 @@ app.post('/forgot-password', async (req, res) => {
         });
 
         // Generic success message even if email sending fails (to prevent information leakage)
-        res.json({ success: true, message: 'If an account with that identifier exists, a password reset link has been sent.' });
+        res.json({ success: true, message: ' Password reset link sent successfully to your account' });
 
     } catch (error) {
         console.error('Error during forgot password request:', error);
@@ -194,7 +194,7 @@ app.post('/reset-password', async (req, res) => {
         await db.execute('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, resetToken.user_id]);
         await db.execute('UPDATE password_reset_tokens SET used = TRUE WHERE token = ?', [token]);
 
-        res.json({ success: true, message: 'Your password has been reset successfully. You can now log in.' });
+        res.json({ success: true, message: 'Your password has been reset successfully.' });
 
     } catch (error) {
         console.error('Reset password error:', error);
