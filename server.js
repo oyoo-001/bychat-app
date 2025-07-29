@@ -32,6 +32,12 @@ const {
 } = require('./db'); // Ensure db.js exports these correctly
 
 const app = express();
+
+// --- ADDED: Trust proxy for Render deployment ---
+// Render acts as a reverse proxy. This setting ensures Express correctly
+// interprets secure headers and client IP, crucial for session cookies.
+app.set('trust proxy', 1); // Trust the first proxy (Render)
+
 const server = http.createServer(app);
 const io = socketIo(server);
 
@@ -58,21 +64,22 @@ const sessionStore = new MySQLStore({
 const sessionMiddleware = session({
     key: 'chat.sid',
     secret: process.env.SESSION_SECRET || 'your_very_secret_key', // IMPORTANT: Change this!
-    resave: false,
-    saveUninitialized: false,
+    resave: false, // Only save session if modified
+    saveUninitialized: false, // Do not save new sessions that have not been modified
     store: sessionStore,
     cookie: {
         maxAge: 1000 * 60 * 60 * 24, // 24 hours
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production', // Use secure cookies in production (HTTPS)
-        sameSite: 'None' // Recommended for modern browsers
+        // Ensure secure is true in production for HTTPS
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'Lax' // Reverted back to 'Lax' as 'trust proxy' should handle this
     },
 });
 
 app.use(sessionMiddleware);
 
 io.use(sharedsession(sessionMiddleware, {
-    autoSave: true,
+    autoSave: true, // This is crucial for session changes to be saved automatically
 }));
 
 // --- Nodemailer Transporter Configuration ---
@@ -153,7 +160,7 @@ app.post('/forgot-password', async (req, res) => {
         });
 
         // Generic success message even if email sending fails (to prevent information leakage)
-        res.json({ success: true, message: ' Password reset link sent successfully to your account' });
+        res.json({ success: true, message: 'If an account with that identifier exists, a password reset link has been sent.' });
 
     } catch (error) {
         console.error('Error during forgot password request:', error);
@@ -194,7 +201,7 @@ app.post('/reset-password', async (req, res) => {
         await db.execute('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, resetToken.user_id]);
         await db.execute('UPDATE password_reset_tokens SET used = TRUE WHERE token = ?', [token]);
 
-        res.json({ success: true, message: 'Your password has been reset successfully.' });
+        res.json({ success: true, message: 'Your password has been reset successfully. You can now log in.' });
 
     } catch (error) {
         console.error('Reset password error:', error);
@@ -332,6 +339,13 @@ async function sendTotalUnreadCountToUser(userId) {
 
 io.on('connection', async (socket) => {
     const session = socket.handshake.session;
+
+    // --- ADDED DETAILED LOGGING HERE ---
+    console.log('--- Socket.IO Connection Attempt ---');
+    console.log('socket.handshake.session:', session);
+    console.log('socket.handshake.session.user:', session ? session.user : 'Session object is null/undefined');
+    console.log('socket.handshake.headers.cookie:', socket.handshake.headers.cookie);
+    // --- END DETAILED LOGGING ---
 
     if (!session.user || !session.user.id) {
         console.log('Unauthenticated socket attempted connection, disconnecting...');
