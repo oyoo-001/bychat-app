@@ -119,7 +119,6 @@ async function saveMessage(userId, username, messageContent) {
 async function getLatestMessages(limit = 100) {
     try {
         // Ensure 'limit' is a valid integer before it's passed to the query.
-        // Use parseInt() to explicitly convert to an integer.
         const queryLimit = parseInt(limit, 10) || 100;
 
         const [rows] = await db.execute(
@@ -135,7 +134,7 @@ async function getLatestMessages(limit = 100) {
 
 async function savePrivateMessage(senderId, receiverId, messageContent) {
     try {
-        const [result] = await db.execute( // Using 'db' for consistency
+        const [result] = await db.execute(
             'INSERT INTO private_messages (sender_id, receiver_id, message_content, is_read) VALUES (?, ?, ?, FALSE)',
             [senderId, receiverId, messageContent]
         );
@@ -148,8 +147,8 @@ async function savePrivateMessage(senderId, receiverId, messageContent) {
 
 async function getPrivateMessageHistory(user1Id, user2Id, limit = 50) {
     try {
-        const queryLimit = parseInt(limit, 10) || 50; // Also made this more robust
-        const [rows] = await db.execute( // Using 'db' for consistency
+        const queryLimit = parseInt(limit, 10) || 50;
+        const [rows] = await db.execute(
             `SELECT pm.message_content, pm.timestamp, u_sender.username AS sender_username, pm.sender_id, pm.receiver_id, pm.is_read
              FROM private_messages pm
              JOIN users u_sender ON pm.sender_id = u_sender.id
