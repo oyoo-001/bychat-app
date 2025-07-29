@@ -1,58 +1,51 @@
-// db.js
 const mysql = require('mysql2/promise');
-// Remove: require('dotenv').config(); // Render automatically handles env vars, no need for dotenv
 
 // Get the full DATABASE_URL from environment variables
 const dbConnectionString = process.env.DATABASE_URL;
 
-// Ensure the DATABASE_URL is set before attempting to connect
 if (!dbConnectionString) {
     console.error('❌ FATAL: DATABASE_URL environment variable is not set!');
-    process.exit(1); // Exit if no DB connection string is found
+    process.exit(1);
 }
 
-const pool = mysql.createPool(dbConnectionString); // Pass the full URL directly to createPool
+const pool = mysql.createPool(dbConnectionString);
 
 // Test the connection
 pool.getConnection()
     .then(connection => {
         console.log('✅ Connected to MySQL database!');
-        connection.release(); // Release the connection immediately after testing
+        connection.release();
     })
     .catch(err => {
-        console.error('❌ Error connecting to MySQL database:', err.message); // This will now show the specific error
-        process.exit(1); // Exit the process if unable to connect to the database
+        console.error('❌ Error connecting to MySQL database:', err.message);
+        process.exit(1);
     });
 
-// Make pool.execute available as db.execute for consistency
 const db = pool;
 
-// --- MODIFIED: Function to register a new user (to include email) ---
-async function registerUser(username, email, hashedPassword) { // Added 'email' parameter
+// --- Register a new user ---
+async function registerUser(username, email, hashedPassword) {
     try {
-        // Check if username already exists
         const [existingUsername] = await db.execute('SELECT id FROM users WHERE username = ?', [username]);
         if (existingUsername.length > 0) {
             throw new Error('Username already exists');
         }
 
-        // Check if email already exists
         const [existingEmail] = await db.execute('SELECT id FROM users WHERE email = ?', [email]);
         if (existingEmail.length > 0) {
             throw new Error('Email already exists');
         }
 
-        // Insert into users table, including email and default preferences
         const [result] = await db.execute(
             'INSERT INTO users (username, email, password, theme_preference, chat_background_image_url) VALUES (?, ?, ?, ?, ?)',
-            [username, email, hashedPassword, 'dark', null] // 'dark' and null are default values
+            [username, email, hashedPassword, 'dark', null]
         );
 
         if (result.affectedRows === 1) {
             return {
                 id: result.insertId,
-                username: username,
-                email: email, // Return email with the new user object
+                username,
+                email,
                 theme_preference: 'dark',
                 chat_background_image_url: null
             };
@@ -61,51 +54,45 @@ async function registerUser(username, email, hashedPassword) { // Added 'email' 
         }
     } catch (error) {
         console.error('Error in registerUser:', error.message);
-        // The specific 'Username already exists' or 'Email already exists' errors are re-thrown
-        // For other DB errors, throw the generic error
         throw error;
     }
 }
 
-// --- MODIFIED: Function to find a user by username (to include email and preferences) ---
+// --- Find user by username ---
 async function findUserByUsername(username) {
     try {
         const [rows] = await db.execute(
             'SELECT id, username, email, password, theme_preference, chat_background_image_url FROM users WHERE username = ?',
             [username]
         );
-        return rows[0] || null; // Returns the first row (user object) or null if not found
+        return rows[0] || null;
     } catch (error) {
         console.error('Error in findUserByUsername:', error.message);
         throw error;
     }
 }
 
-// --- NEW: Function to find a user by username OR email (Crucial for Forgot Password) ---
+// --- Find user by username OR email ---
 async function findUserByIdentifier(identifier) {
     try {
         const [rows] = await db.execute(
             'SELECT id, username, email, password, theme_preference, chat_background_image_url FROM users WHERE username = ? OR email = ?',
-            [identifier, identifier] // Tries to match by username or email
+            [identifier, identifier]
         );
-        return rows[0] || null; // Returns the first user found or null
+        return rows[0] || null;
     } catch (error) {
         console.error('Error in findUserByIdentifier:', error.message);
         throw error;
     }
 }
 
-// --- MODIFIED: Function to update user preferences (if you want to control what's nullable from client) ---
-// This function needs careful handling if chatBackgroundImageUrl can be NULL.
-// The current SQL sets it to NULL if passed as NULL.
+// --- Save user preferences ---
 async function saveUserPreferences(userId, themePreference, chatBackgroundImageUrl) {
     try {
         let updateQuery = `UPDATE users SET theme_preference = ?`;
         const params = [themePreference];
 
-        // Only add chat_background_image_url to query if it's explicitly provided
-        // This prevents overwriting with NULL if the client doesn't send it.
-        if (chatBackgroundImageUrl !== undefined) { // Check for undefined, not just null
+        if (chatBackgroundImageUrl !== undefined) {
             updateQuery += `, chat_background_image_url = ?`;
             params.push(chatBackgroundImageUrl);
         }
@@ -114,19 +101,17 @@ async function saveUserPreferences(userId, themePreference, chatBackgroundImageU
         params.push(userId);
 
         const [result] = await db.execute(updateQuery, params);
-        return result.affectedRows > 0; // Return true if rows were affected, false otherwise
+        return result.affectedRows > 0;
     } catch (error) {
         console.error('Error in saveUserPreferences:', error.message);
         throw error;
     }
 }
 
-
-// --- Existing Message Functions (ensure they use 'db' alias for consistency) ---
-
+// --- Save global message ---
 async function saveMessage(userId, username, messageContent) {
     try {
-        const [result] = await db.execute( // Using db.execute for consistency
+        const [result] = await db.execute(
             'INSERT INTO global_messages (user_id, username, message_content) VALUES (?, ?, ?)',
             [userId, username, messageContent]
         );
@@ -137,24 +122,25 @@ async function saveMessage(userId, username, messageContent) {
     }
 }
 
-// Function to get the latest chat messages (global)
+// --- Get latest global messages ---
 async function getLatestMessages(limit = 100) {
     try {
-        // --- FIX APPLIED HERE: Pass limit as an array to db.execute ---
-         console.log(`DEBUG: getLatestMessages received limit: ${limit}, type: ${typeof limit}`); // <-- ADD THIS LINE
+        limit = parseInt(limit, 10);
+        if (isNaN(limit)) limit = 100;
+
         const [rows] = await db.execute(
             'SELECT username, message_content, timestamp FROM global_messages ORDER BY timestamp DESC LIMIT ?',
-            [limit] // <--- THIS WAS THE CHANGE NEEDED
+            [limit]
         );
         console.log('Fetched latest global messages.');
-        return rows.reverse(); // Return in ascending order (oldest first)
+        return rows.reverse();
     } catch (error) {
         console.error('Error getting latest global messages:', error.message);
         throw error;
     }
 }
 
-// Function to save a private message
+// --- Save private message ---
 async function savePrivateMessage(senderId, receiverId, messageContent) {
     try {
         const [result] = await db.execute(
@@ -168,10 +154,13 @@ async function savePrivateMessage(senderId, receiverId, messageContent) {
     }
 }
 
-// Function to get private message history between two users
+// --- Get private message history ---
 async function getPrivateMessageHistory(user1Id, user2Id, limit = 50) {
     try {
-        const [rows] = await db.execute( // Using db.execute
+        limit = parseInt(limit, 10);
+        if (isNaN(limit)) limit = 50;
+
+        const [rows] = await db.execute(
             `SELECT
                 pm.message_content,
                 pm.timestamp,
@@ -198,25 +187,20 @@ async function getPrivateMessageHistory(user1Id, user2Id, limit = 50) {
     }
 }
 
-// Function to get unread counts for a specific user from all other users
+// --- Get unread counts from all other users ---
 async function getUnreadCountsForUser(userId) {
     try {
-        const [rows] = await db.execute( // Using db.execute
-            `SELECT
-                sender_id,
-                COUNT(*) AS unread_count
-            FROM
-                private_messages
-            WHERE
-                receiver_id = ? AND is_read = FALSE
-            GROUP BY
-                sender_id`,
+        const [rows] = await db.execute(
+            `SELECT sender_id, COUNT(*) AS unread_count
+             FROM private_messages
+             WHERE receiver_id = ? AND is_read = FALSE
+             GROUP BY sender_id`,
             [userId]
         );
 
         const unreadCounts = {};
         rows.forEach(row => {
-            unreadCounts[row.sender_id] = parseInt(row.unread_count, 10); // Ensure count is a number
+            unreadCounts[row.sender_id] = parseInt(row.unread_count, 10);
         });
         return unreadCounts;
     } catch (error) {
@@ -225,13 +209,13 @@ async function getUnreadCountsForUser(userId) {
     }
 }
 
-// Function to get the total number of unread messages for a user
+// --- Get total unread count for a user ---
 async function getTotalUnreadCountForUser(userId) {
     try {
-        const [rows] = await db.execute( // Using db.execute
+        const [rows] = await db.execute(
             `SELECT COUNT(*) AS total_unread_count
-            FROM private_messages
-            WHERE receiver_id = ? AND is_read = FALSE`,
+             FROM private_messages
+             WHERE receiver_id = ? AND is_read = FALSE`,
             [userId]
         );
         return rows[0] ? parseInt(rows[0].total_unread_count, 10) : 0;
@@ -241,13 +225,13 @@ async function getTotalUnreadCountForUser(userId) {
     }
 }
 
-// Function to mark messages as read for a specific recipient from a specific sender
+// --- Mark messages as read ---
 async function markMessagesAsRead(receiverId, senderId) {
     try {
-        const [result] = await db.execute( // Using db.execute
+        const [result] = await db.execute(
             `UPDATE private_messages
-            SET is_read = TRUE
-            WHERE receiver_id = ? AND sender_id = ? AND is_read = FALSE`,
+             SET is_read = TRUE
+             WHERE receiver_id = ? AND sender_id = ? AND is_read = FALSE`,
             [receiverId, senderId]
         );
         return result.affectedRows;
@@ -258,11 +242,11 @@ async function markMessagesAsRead(receiverId, senderId) {
 }
 
 module.exports = {
-    pool, // Export the pool directly if needed for advanced use
-    db, // Export db as an alias for pool.execute for consistency
+    pool,
+    db,
     registerUser,
     findUserByUsername,
-    findUserByIdentifier, // IMPORTANT: Export this new function
+    findUserByIdentifier,
     saveUserPreferences,
     saveMessage,
     getLatestMessages,
