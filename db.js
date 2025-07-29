@@ -140,11 +140,11 @@ async function saveMessage(userId, username, messageContent) {
 // Function to get the latest chat messages (global)
 async function getLatestMessages(limit = 100) {
     try {
-        // --- FIX APPLIED HERE: Pass limit as an array to db.execute ---
-         console.log(`DEBUG: getLatestMessages received limit: ${limit}, type: ${typeof limit}`); // <-- ADD THIS LINE
+        console.log(`DEBUG: getLatestMessages received limit: ${limit}, type: ${typeof limit}`);
         const [rows] = await db.execute(
-            'SELECT username, message_content, timestamp FROM global_messages ORDER BY timestamp DESC LIMIT ?',
-            [limit] // <--- THIS WAS THE CHANGE NEEDED
+            // Modified SQL: Explicitly cast the limit parameter to UNSIGNED
+            'SELECT username, message_content, timestamp FROM global_messages ORDER BY timestamp DESC LIMIT CAST(? AS UNSIGNED)',
+            [limit] // Still pass limit as a number in an array
         );
         console.log('Fetched latest global messages.');
         return rows.reverse(); // Return in ascending order (oldest first)
@@ -188,8 +188,8 @@ async function getPrivateMessageHistory(user1Id, user2Id, limit = 50) {
                 (pm.sender_id = ? AND pm.receiver_id = ?)
             ORDER BY
                 pm.timestamp ASC
-            LIMIT ?`,
-            [user1Id, user2Id, user2Id, user1Id, limit]
+            LIMIT CAST(? AS UNSIGNED)`, // Modified SQL: Explicitly cast the limit parameter to UNSIGNED
+            [user1Id, user2Id, user2Id, user1Id, limit] // Ensure this array has 5 elements in the correct order
         );
         return rows;
     } catch (error) {
