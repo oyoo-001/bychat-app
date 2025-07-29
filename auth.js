@@ -34,12 +34,20 @@ router.post('/signup', async (req, res) => {
         req.session.user = {
             id: newUser.id,
             username: newUser.username,
-            // email: newUser.email, // If newUser object returns email
+            // email: newUser.email, // If newUser object returns email (recommended to return full user from registerUser)
             // theme_preference: newUser.theme_preference,
             // chat_background_image_url: newUser.chat_background_image_url
         };
 
-        sendJsonResponse(res, true, 'Registration successful! Please log in.', { username: newUser.username, userId: newUser.id });
+        // For signup, if you auto-login, you might want to save the session explicitly too
+        req.session.save((err) => {
+            if (err) {
+                console.error('Error saving session after signup:', err);
+                return sendJsonResponse(res, false, 'Registration failed due to session error.');
+            }
+            sendJsonResponse(res, true, 'Registration successful! You are now logged in.', { username: newUser.username, userId: newUser.id });
+        });
+
     } catch (error) {
         console.error('Registration error:', error);
         if (error.message === 'Username already exists' || error.message === 'Email already exists') {
@@ -69,6 +77,8 @@ router.post('/login', async (req, res) => {
         const isMatch = await bcrypt.compare(password, user.password);
 
         if (isMatch) {
+            console.log('User authenticated successfully:', user.username); // <-- ADDED LOG
+
             // Store user info in session
             req.session.user = {
                 id: user.id,
@@ -77,7 +87,21 @@ router.post('/login', async (req, res) => {
                 theme_preference: user.theme_preference, // Ensure this is available from findUserByUsername
                 chat_background_image_url: user.chat_background_image_url // Ensure this is available from findUserByUsername
             };
-            sendJsonResponse(res, true, 'Login successful!', { username: user.username, userId: user.id });
+
+            console.log('Session user after setting:', req.session.user); // <-- ADDED LOG
+
+            // Explicitly save the session to ensure it's persisted before sending the response
+            req.session.save((err) => {
+                if (err) {
+                    console.error('Error saving session after login:', err); // <-- ADDED ERROR LOG
+                    // Even if session save fails, we might still want to allow login for now,
+                    // but it's crucial for Socket.IO.
+                    return sendJsonResponse(res, false, 'Login failed due to session error.');
+                }
+                // Only send success response after session is confirmed saved
+                sendJsonResponse(res, true, 'Login successful!', { username: user.username, userId: user.id });
+            });
+
         } else {
             sendJsonResponse(res, false, 'Invalid username or password.');
         }
