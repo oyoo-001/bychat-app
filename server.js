@@ -27,9 +27,8 @@ const {
     getTotalUnreadCountForUser,
     markMessagesAsRead,
     saveUserPreferences,
-    db // Assuming 'db' (the promise-based connection) is also exported from db.js
-       // If 'db' is not exported from db.js, ensure you have a similar
-       // promise-based connection pool set up here or use 'pool.promise()'
+    db, // Assuming 'db' (the promise-based connection) is also exported from db.js
+    findUserByIdentifier // <--- ADDED: Import the new user lookup function
 } = require('./db'); // Ensure db.js exports these correctly
 
 const app = express();
@@ -110,9 +109,8 @@ app.post('/forgot-password', async (req, res) => {
     const { identifier } = req.body; // User provides username or email
 
     try {
-        // 1. Find the user by username or email
-        const [users] = await db.execute('SELECT id, email FROM users WHERE username = ? OR email = ?', [identifier, identifier]);
-        const user = users[0];
+        // 1. Find the user by username or email using the dedicated function
+        const user = await findUserByIdentifier(identifier); // <--- MODIFIED: Using findUserByIdentifier
 
         if (!user) {
             // IMPORTANT SECURITY: Always send a generic success message
@@ -243,6 +241,7 @@ app.get('/session', (req, res) => {
             loggedIn: true,
             username: req.session.user.username,
             userId: req.session.user.id,
+            email: req.session.user.email, // Ensure email is passed to session if retrieved by findUserByUsername/Identifier
             theme_preference: req.session.user.theme_preference,
             chat_background_image_url: req.session.user.chat_background_image_url
         });
