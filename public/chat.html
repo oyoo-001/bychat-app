@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Chat - WhatsApp Style</title>
+    <title>Bychat</title>
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon.jpg">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
@@ -544,17 +544,7 @@
             color: #00e676;
             transform: scale(1.1);
         }
-        #file-input {
-            display: none;
-        }
-        #file-upload-button label {
-            cursor: pointer;
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
+
 
         /* --- Overlay for Mobile Sidebar --- */
         .sidebar-overlay {
@@ -999,7 +989,7 @@
 
     <div id="main-content-wrapper">
         <aside id="sidebar">
-            <h2>Online Users</h2>
+            <h2>Members</h2>
             <ul id="user-list">
                 <li id="global-chat-item" class="user-item active">
                     <span class="user-item-name">Group Chat</span>
@@ -1016,10 +1006,7 @@
         <button type="button" id="voice-chat-button" class="action-button" title="Start Voice Chat">
             <i class="fas fa-phone"></i>
         </button>
-        <button type="button" id="file-upload-button" class="action-button" title="Upload File">
-            <label for="file-input"><i class="fas fa-paperclip"></i></label>
-            <input type="file" id="file-input" accept="image/*, video/*, .pdf, .doc, .docx, .txt" />
-        </button>
+
         <button type="button" id="emoji-button">😊</button>
         <input id="message-input" autocomplete="off" placeholder="Type a message..." />
         <button id="send-btn">Send</button>
@@ -1092,8 +1079,7 @@
         const emojiPickerContainer = document.getElementById('emoji-picker-container');
 
         const voiceChatButton = document.getElementById('voice-chat-button');
-        const fileUploadButton = document.getElementById('file-upload-button');
-        const fileInput = document.getElementById('file-input');
+
 
         const addItemButton = document.getElementById('add-item-button');
         const settingsButton = document.getElementById('settings-button');
@@ -1488,19 +1474,7 @@
             }
         });
 
-        // File Upload Button Logic (Placeholder)
-        fileInput.addEventListener('change', (event) => {
-            const file = event.target.files[0];
-            if (file) {
-                if (currentChatPartner) {
-                    alert(`Preparing to upload file: ${file.name} to ${currentChatPartner.username}... (Feature not fully implemented)`);
-                    console.log(`User ${currentUserId} selected file for upload:`, file);
-                } else {
-                    alert("Please select a private chat to upload a file.");
-                }
-            }
-            fileInput.value = '';
-        });
+
 
         // Add Item Button Logic (Placeholder)
         addItemButton.addEventListener('click', () => {
