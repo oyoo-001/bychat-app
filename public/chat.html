@@ -1229,7 +1229,7 @@
                 socket.emit('request-global-history');
                 setActiveUserItem('global');
                 voiceChatButton.style.display = 'none';
-                fileUploadButton.style.display = 'none';
+               
             } else {
                 chatTitle.textContent = `Chat with ${targetUser.username}`;
                 socket.emit('request-private-history', targetUser.id);
