@@ -1648,7 +1648,7 @@
             }
         });
 
-      // public/chat.html (or public/js/chat.js)
+     // public/chat.html (or public/js/chat.js)
 
 async function loadUserSettings() {
     try {
@@ -1679,7 +1679,11 @@ async function loadUserSettings() {
             const chatBox = document.getElementById('chat-box'); // Ensure you have an element with id="chat-box"
             if (chatBox) {
                 if (chat_background_image_url) {
-                    chatBox.style.backgroundImage = `url(${chat_background_image_url})`;
+                    // Prepend server origin if not already there (for full URL, useful if paths are relative)
+                    // The line below should handle both relative paths (e.g., '/images/bg.jpg')
+                    // and full URLs (e.g., 'https://example.com/images/bg.jpg')
+                    const imageUrl = chat_background_image_url.startsWith('http') ? chat_background_image_url : window.location.origin + chat_background_image_url;
+                    chatBox.style.backgroundImage = `url('${imageUrl}')`;
                     chatBox.style.backgroundSize = 'cover';
                     chatBox.style.backgroundPosition = 'center';
                     chatBox.style.backgroundAttachment = 'fixed'; // Optional: for parallax-like effect
@@ -1712,44 +1716,6 @@ async function loadUserSettings() {
         // is responsible for redirecting unauthenticated users.
     }
 }
-
-                    // Apply Theme
-                    if (theme_preference) {
-                        applyTheme(theme_preference, false); // Don't save to server again
-                        themeSelect.value = theme_preference;
-                    } else {
-                        applyTheme('dark', false); // Default to dark if nothing saved
-                        themeSelect.value = 'dark';
-                    }
-
-                    // Apply Background Image
-                    if (chat_background_image_url) {
-                        // Prepend server origin if not already there (for full URL)
-                        const imageUrl = chat_background_image_url.startsWith('http') ? chat_background_image_url : window.location.origin + chat_background_image_url;
-                        chatContainer.style.backgroundImage = `url('${imageUrl}')`;
-                        localStorage.setItem('chatAppBackgroundUrl', imageUrl);
-                        setBackgroundBtn.textContent = 'Change Background';
-                        clearBackgroundBtn.style.display = 'inline-block';
-                    } else {
-                        chatContainer.style.backgroundImage = 'none';
-                        localStorage.removeItem('chatAppBackgroundUrl');
-                        setBackgroundBtn.textContent = 'Set Background';
-                        clearBackgroundBtn.style.display = 'none';
-                    }
-                } else {
-                    console.warn('No user settings found or failed to load, applying defaults.');
-                    applyTheme('dark', false); // Apply default dark theme
-                }
-            } catch (error) {
-                console.error('Error fetching user settings:', error);
-                // Fallback to local storage if server fetch fails or error occurs
-                const savedTheme = localStorage.getItem('chatAppTheme');
-                if (savedTheme) applyTheme(savedTheme, false);
-                const savedBackground = localStorage.getItem('chatAppBackgroundUrl');
-                if (savedBackground) chatContainer.style.backgroundImage = `url('${savedBackground}')`;
-            }
-        }
-
 
         // Add Group Button (Placeholder)
         addGroupBtn.addEventListener('click', () => {
