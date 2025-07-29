@@ -140,7 +140,7 @@ async function getLatestMessages(limit = 100) {
     try {
         console.log(`DEBUG: getLatestMessages received limit: ${limit}, type: ${typeof limit}`);
         const [rows] = await db.execute(
-            'SELECT username, message_content, timestamp FROM global_messages ORDER BY timestamp DESC LIMIT ?',
+           'SELECT username, message_content, timestamp FROM global_messages ORDER BY timestamp DESC LIMIT ?',
             [limit] // CRITICAL FIX: Wrap 'limit' in an array for db.execute
         );
         console.log('Fetched latest global messages.');
