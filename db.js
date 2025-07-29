@@ -141,10 +141,10 @@ async function saveMessage(userId, username, messageContent) {
 async function getLatestMessages(limit = 100) {
     try {
         console.log(`DEBUG: getLatestMessages received limit: ${limit}, type: ${typeof limit}`);
+        // Removed CAST(? AS UNSIGNED)
         const [rows] = await db.execute(
-            // Modified SQL: Explicitly cast the limit parameter to UNSIGNED
-            'SELECT username, message_content, timestamp FROM global_messages ORDER BY timestamp DESC LIMIT CAST(? AS UNSIGNED)',
-            [limit] // Still pass limit as a number in an array
+            'SELECT username, message_content, timestamp FROM global_messages ORDER BY timestamp DESC LIMIT ?',
+            [limit] // Pass limit directly
         );
         console.log('Fetched latest global messages.');
         return rows.reverse(); // Return in ascending order (oldest first)
@@ -188,8 +188,8 @@ async function getPrivateMessageHistory(user1Id, user2Id, limit = 50) {
                 (pm.sender_id = ? AND pm.receiver_id = ?)
             ORDER BY
                 pm.timestamp ASC
-            LIMIT CAST(? AS UNSIGNED)`, // Modified SQL: Explicitly cast the limit parameter to UNSIGNED
-            [user1Id, user2Id, user2Id, user1Id, limit] // Ensure this array has 5 elements in the correct order
+            LIMIT ?`, // Removed CAST(? AS UNSIGNED)
+            [user1Id, user2Id, user2Id, user1Id, limit] // Pass limit directly
         );
         return rows;
     } catch (error) {
