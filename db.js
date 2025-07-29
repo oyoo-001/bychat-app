@@ -1,6 +1,6 @@
 // db.js
 const mysql = require('mysql2/promise');
-// Remove: require('dotenv').config(); // Render automatically handles env vars, no need for dotenv
+// Removed: require('dotenv').config(); // Render automatically handles env vars, no need for dotenv
 
 // Get the full DATABASE_URL from environment variables
 const dbConnectionString = process.env.DATABASE_URL;
@@ -27,7 +27,7 @@ pool.getConnection()
 // Make pool.execute available as db.execute for consistency
 const db = pool;
 
-// --- MODIFIED: Function to register a new user (to include email) ---
+// Function to register a new user (to include email)
 async function registerUser(username, email, hashedPassword) { // Added 'email' parameter
     try {
         // Check if username already exists
@@ -67,7 +67,7 @@ async function registerUser(username, email, hashedPassword) { // Added 'email' 
     }
 }
 
-// --- MODIFIED: Function to find a user by username (to include email and preferences) ---
+// Function to find a user by username (to include email and preferences)
 async function findUserByUsername(username) {
     try {
         const [rows] = await db.execute(
@@ -81,7 +81,7 @@ async function findUserByUsername(username) {
     }
 }
 
-// --- NEW: Function to find a user by username OR email (Crucial for Forgot Password) ---
+// NEW: Function to find a user by username OR email (Crucial for Forgot Password)
 async function findUserByIdentifier(identifier) {
     try {
         const [rows] = await db.execute(
@@ -95,7 +95,7 @@ async function findUserByIdentifier(identifier) {
     }
 }
 
-// --- MODIFIED: Function to update user preferences (if you want to control what's nullable from client) ---
+// Function to update user preferences (if you want to control what's nullable from client)
 // This function needs careful handling if chatBackgroundImageUrl can be NULL.
 // The current SQL sets it to NULL if passed as NULL.
 async function saveUserPreferences(userId, themePreference, chatBackgroundImageUrl) {
@@ -121,9 +121,7 @@ async function saveUserPreferences(userId, themePreference, chatBackgroundImageU
     }
 }
 
-
-// --- Existing Message Functions (ensure they use 'db' alias for consistency) ---
-
+// Existing Message Functions (ensure they use 'db' alias for consistency)
 async function saveMessage(userId, username, messageContent) {
     try {
         const [result] = await db.execute( // Using db.execute for consistency
@@ -137,14 +135,13 @@ async function saveMessage(userId, username, messageContent) {
     }
 }
 
-// Function to get the latest chat messages (global)
+// --- MODIFIED: Function to get the latest chat messages (global) ---
 async function getLatestMessages(limit = 100) {
     try {
         console.log(`DEBUG: getLatestMessages received limit: ${limit}, type: ${typeof limit}`);
-        // Removed CAST(? AS UNSIGNED)
         const [rows] = await db.execute(
             'SELECT username, message_content, timestamp FROM global_messages ORDER BY timestamp DESC LIMIT ?',
-            [limit] // Pass limit directly
+            [limit] // CRITICAL FIX: Wrap 'limit' in an array for db.execute
         );
         console.log('Fetched latest global messages.');
         return rows.reverse(); // Return in ascending order (oldest first)
@@ -168,9 +165,10 @@ async function savePrivateMessage(senderId, receiverId, messageContent) {
     }
 }
 
-// Function to get private message history between two users
+// --- MODIFIED: Function to get private message history between two users ---
 async function getPrivateMessageHistory(user1Id, user2Id, limit = 50) {
     try {
+        console.log(`DEBUG: getPrivateMessageHistory received limit: ${limit}, type: ${typeof limit}`);
         const [rows] = await db.execute( // Using db.execute
             `SELECT
                 pm.message_content,
@@ -188,8 +186,8 @@ async function getPrivateMessageHistory(user1Id, user2Id, limit = 50) {
                 (pm.sender_id = ? AND pm.receiver_id = ?)
             ORDER BY
                 pm.timestamp ASC
-            LIMIT ?`, // Removed CAST(? AS UNSIGNED)
-            [user1Id, user2Id, user2Id, user1Id, limit] // Pass limit directly
+            LIMIT ?`,
+            [user1Id, user2Id, user2Id, user1Id, limit] // CRITICAL FIX: Ensure all parameters are in this array
         );
         return rows;
     } catch (error) {
@@ -262,7 +260,7 @@ module.exports = {
     db, // Export db as an alias for pool.execute for consistency
     registerUser,
     findUserByUsername,
-    findUserByIdentifier, // IMPORTANT: Export this new function
+    findUserByIdentifier,
     saveUserPreferences,
     saveMessage,
     getLatestMessages,
