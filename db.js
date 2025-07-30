@@ -1,42 +1,44 @@
 const mysql = require('mysql2/promise');
-require('dotenv').config(); // Load environment variables here
+require('dotenv').config(); // Load environment variables
 
 const pool = mysql.createPool({
     host: process.env.DB_HOST || 'localhost',
     user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '', // Use DB_PASSWORD from .env
+    password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'chat_app',
-    port: process.env.DB_PORT || 3306, // Use DB_PORT from .env, fallback to 3306
+    port: process.env.DB_PORT || 3306,
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0
 });
 
-// Test the connection
-pool.getConnection()
-    .then(connection => {
+// Test database connection on startup
+async function testConnection() {
+    try {
+        const connection = await pool.getConnection();
         console.log('✅ Connected to MySQL database!');
-        connection.release(); // Release the connection immediately after testing
-    })
-    .catch(err => {
+        connection.release();
+    } catch (err) {
         console.error('❌ Error connecting to MySQL database:', err.message);
-        process.exit(1); // Exit the process if unable to connect to the database
-    });
+        process.exit(1);
+    }
+}
+testConnection();
 
 // Function to register a new user
 async function registerUser(username, hashedPassword) {
     try {
         const [result] = await pool.execute(
-            'INSERT INTO users (username, password) VALUES (?, ?)', // CHANGED: password_hash -> password
+            'INSERT INTO users (username, password) VALUES (?, ?)',
             [username, hashedPassword]
         );
         return { id: result.insertId, username };
     } catch (error) {
         console.error('Error in registerUser:', error.message);
-        if (error.code === 'ER_DUP_ENTRY') { // MySQL unique violation error code
+        if (error.code === 'ER_DUP_ENTRY') {
             throw new Error('Username already exists');
         }
-        throw error; // Re-throw other errors
+        throw error;
     }
 }
 
@@ -44,10 +46,10 @@ async function registerUser(username, hashedPassword) {
 async function findUserByUsername(username) {
     try {
         const [rows] = await pool.execute(
-            'SELECT id, username, password, theme_preference, chat_background_image_url FROM users WHERE username = ?', // CHANGED: password_hash -> password
+            'SELECT id, username, password, theme_preference, chat_background_image_url FROM users WHERE username = ?',
             [username]
         );
-        return rows[0]; // Returns the first row (user object) or undefined if not found
+        return rows[0];
     } catch (error) {
         console.error('Error in findUserByUsername:', error.message);
         throw error;
@@ -73,16 +75,23 @@ async function getLatestMessages(limit = 100) {
     try {
         const parsedLimit = parseInt(limit, 10); // Ensure limit is an integer
         if (isNaN(parsedLimit) || parsedLimit <= 0) {
-            throw new Error('Invalid limit value: must be a positive integer');
+            console.warn('Invalid limit value, using default:', 100);
+            parsedLimit = 100; // Fallback to default
         }
         console.log('getLatestMessages: Executing with limit =', parsedLimit); // Debug log
         const [rows] = await pool.execute(
             'SELECT username, message_content, timestamp FROM global_messages ORDER BY timestamp DESC LIMIT ?',
             [parsedLimit]
         );
-        return rows.reverse(); // Return in ascending order (oldest first)
+        console.log('Fetched messages count:', rows.length); // Additional debug log
+        return rows.reverse(); // Return in ascending order
     } catch (error) {
-        console.error('Error getting latest global messages:', error.message);
+        console.error('Error getting latest global messages:', {
+            message: error.message,
+            sqlMessage: error.sqlMessage,
+            sqlState: error.sqlState,
+            code: error.code
+        });
         throw error;
     }
 }
@@ -110,7 +119,7 @@ async function getPrivateMessageHistory(user1Id, user2Id, limit = 50) {
         if (isNaN(parsedUser1Id) || isNaN(parsedUser2Id) || isNaN(parsedLimit) || parsedLimit <= 0) {
             throw new Error('Invalid parameters: user1Id, user2Id, and limit must be positive integers');
         }
-        console.log('getPrivateMessageHistory: Executing with user1Id =', parsedUser1Id, 'user2Id =', parsedUser2Id, 'limit =', parsedLimit); // Debug log
+        console.log('getPrivateMessageHistory: Executing with user1Id =', parsedUser1Id, 'user2Id =', parsedUser2Id, 'limit =', parsedLimit);
         const [rows] = await pool.execute(
             `SELECT
                 pm.message_content,
@@ -131,9 +140,15 @@ async function getPrivateMessageHistory(user1Id, user2Id, limit = 50) {
             LIMIT ?`,
             [parsedUser1Id, parsedUser2Id, parsedUser2Id, parsedUser1Id, parsedLimit]
         );
+        console.log('Fetched private messages count:', rows.length);
         return rows;
     } catch (error) {
-        console.error('Error getting private message history:', error.message);
+        console.error('Error getting private message history:', {
+            message: error.message,
+            sqlMessage: error.sqlMessage,
+            sqlState: error.sqlState,
+            code: error.code
+        });
         throw error;
     }
 }
@@ -141,6 +156,10 @@ async function getPrivateMessageHistory(user1Id, user2Id, limit = 50) {
 // Function to get unread counts for a specific user from all other users
 async function getUnreadCountsForUser(userId) {
     try {
+        const parsedUserId = parseInt(userId, 10);
+        if (isNaN(parsedUserId) || parsedUserId <= 0) {
+            throw new Error('Invalid userId: must be a positive integer');
+        }
         const [rows] = await pool.execute(
             `SELECT
                 sender_id,
@@ -151,12 +170,11 @@ async function getUnreadCountsForUser(userId) {
                 receiver_id = ? AND is_read = FALSE
             GROUP BY
                 sender_id`,
-            [userId]
+            [parsedUserId]
         );
-
         const unreadCounts = {};
         rows.forEach(row => {
-            unreadCounts[row.sender_id] = parseInt(row.unread_count, 10); // Ensure count is a number
+            unreadCounts[row.sender_id] = parseInt(row.unread_count, 10);
         });
         return unreadCounts;
     } catch (error) {
@@ -168,11 +186,15 @@ async function getUnreadCountsForUser(userId) {
 // Function to get the total number of unread messages for a user
 async function getTotalUnreadCountForUser(userId) {
     try {
+        const parsedUserId = parseInt(userId, 10);
+        if (isNaN(parsedUserId) || parsedUserId <= 0) {
+            throw new Error('Invalid userId: must be a positive integer');
+        }
         const [rows] = await pool.execute(
             `SELECT COUNT(*) AS total_unread_count
             FROM private_messages
             WHERE receiver_id = ? AND is_read = FALSE`,
-            [userId]
+            [parsedUserId]
         );
         return rows[0] ? parseInt(rows[0].total_unread_count, 10) : 0;
     } catch (error) {
@@ -184,11 +206,16 @@ async function getTotalUnreadCountForUser(userId) {
 // Function to mark messages as read for a specific recipient from a specific sender
 async function markMessagesAsRead(receiverId, senderId) {
     try {
+        const parsedReceiverId = parseInt(receiverId, 10);
+        const parsedSenderId = parseInt(senderId, 10);
+        if (isNaN(parsedReceiverId) || isNaN(parsedSenderId)) {
+            throw new Error('Invalid receiverId or senderId: must be positive integers');
+        }
         const [result] = await pool.execute(
             `UPDATE private_messages
             SET is_read = TRUE
             WHERE receiver_id = ? AND sender_id = ? AND is_read = FALSE`,
-            [receiverId, senderId]
+            [parsedReceiverId, parsedSenderId]
         );
         return result.affectedRows;
     } catch (error) {
