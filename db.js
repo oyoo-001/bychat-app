@@ -1,4 +1,3 @@
-// db.js
 const mysql = require('mysql2/promise');
 require('dotenv').config(); // Load environment variables here
 
@@ -72,9 +71,14 @@ async function saveMessage(userId, username, messageContent) {
 // Function to get the latest chat messages (global)
 async function getLatestMessages(limit = 100) {
     try {
+        const parsedLimit = parseInt(limit, 10); // Ensure limit is an integer
+        if (isNaN(parsedLimit) || parsedLimit <= 0) {
+            throw new Error('Invalid limit value: must be a positive integer');
+        }
+        console.log('getLatestMessages: Executing with limit =', parsedLimit); // Debug log
         const [rows] = await pool.execute(
             'SELECT username, message_content, timestamp FROM global_messages ORDER BY timestamp DESC LIMIT ?',
-            [limit]
+            [parsedLimit]
         );
         return rows.reverse(); // Return in ascending order (oldest first)
     } catch (error) {
@@ -100,6 +104,13 @@ async function savePrivateMessage(senderId, receiverId, messageContent) {
 // Function to get private message history between two users
 async function getPrivateMessageHistory(user1Id, user2Id, limit = 50) {
     try {
+        const parsedUser1Id = parseInt(user1Id, 10);
+        const parsedUser2Id = parseInt(user2Id, 10);
+        const parsedLimit = parseInt(limit, 10);
+        if (isNaN(parsedUser1Id) || isNaN(parsedUser2Id) || isNaN(parsedLimit) || parsedLimit <= 0) {
+            throw new Error('Invalid parameters: user1Id, user2Id, and limit must be positive integers');
+        }
+        console.log('getPrivateMessageHistory: Executing with user1Id =', parsedUser1Id, 'user2Id =', parsedUser2Id, 'limit =', parsedLimit); // Debug log
         const [rows] = await pool.execute(
             `SELECT
                 pm.message_content,
@@ -118,7 +129,7 @@ async function getPrivateMessageHistory(user1Id, user2Id, limit = 50) {
             ORDER BY
                 pm.timestamp ASC
             LIMIT ?`,
-            [user1Id, user2Id, user2Id, user1Id, limit]
+            [parsedUser1Id, parsedUser2Id, parsedUser2Id, parsedUser1Id, parsedLimit]
         );
         return rows;
     } catch (error) {
