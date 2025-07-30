@@ -1,3 +1,4 @@
+// server.js
 require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
@@ -6,37 +7,31 @@ const sharedsession = require('express-socket.io-session');
 const path = require('path');
 const http = require('http');
 const socketIo = require('socket.io');
-const crypto = require('crypto');
-const nodemailer = require('nodemailer');
-const bcrypt = require('bcrypt');
-const authRoutes = require('./auth');
+const { registerUser, loginUser } = require('./auth');
 const {
-    pool,
-    registerUser,
-    findUserByUsername,
-    findUserByIdentifier,
     saveMessage,
     getLatestMessages,
     savePrivateMessage,
     getPrivateMessageHistory,
     getUnreadCountsForUser,
-    getTotalUnreadCountForUser,
+    getTotalUnreadCountForUser, // NEW: Import new db function
     markMessagesAsRead
 } = require('./db');
 
 const app = express();
-app.set('trust proxy', 1);
 const server = http.createServer(app);
 const io = socketIo(server);
 
+// Middleware to parse JSON and form data
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Session configuration
 const sessionStore = new MySQLStore({
     host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || 3306,
+    port: 3306,
     user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
+    password: process.env.DB_PASS || '',
     database: process.env.DB_NAME || 'chat_app',
     clearExpired: true,
     checkExpirationInterval: 900000,
@@ -45,7 +40,7 @@ const sessionStore = new MySQLStore({
 
 const sessionMiddleware = session({
     key: 'chat.sid',
-    secret: process.env.SESSION_SECRET || 'your_very_secret_key',
+    secret: process.env.SESSION_SECRET || 'yourSecret',
     resave: false,
     saveUninitialized: false,
     store: sessionStore,
@@ -53,92 +48,21 @@ const sessionMiddleware = session({
         maxAge: 1000 * 60 * 60 * 24,
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'Lax'
     },
 });
 
+// Apply session middleware to Express
 app.use(sessionMiddleware);
-io.use(sharedsession(sessionMiddleware, { autoSave: true }));
 
-const transporter = nodemailer.createTransport({
-    service: 'Gmail',
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-    },
-});
+// Apply session middleware to Socket.IO
+io.use(sharedsession(sessionMiddleware, {
+    autoSave: true,
+}));
 
+// Serve static files from 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
-app.use(authRoutes);
 
-app.get('/forgot-password.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'forgot-password.html'));
-});
-
-app.post('/forgot-password', async (req, res) => {
-    const { identifier } = req.body;
-    try {
-        const user = await findUserByIdentifier(identifier);
-        if (!user) {
-            console.log(`Password reset requested for non-existent identifier: ${identifier}`);
-            return res.json({ success: true, message: 'If an account with that identifier exists, a password reset link has been sent.' });
-        }
-        if (!user.email) {
-            console.warn(`User ${user.id} (${user.username}) requested password reset but has no email.`);
-            return res.json({ success: true, message: 'If an account with that identifier exists, a password reset link has been sent.' });
-        }
-        const token = crypto.randomBytes(32).toString('hex');
-        const expiresAt = new Date(Date.now() + 3600000);
-        const query = `INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (${user.id}, '${mysql.escape(token)}', '${expiresAt.toISOString()}')`;
-        console.log('forgot-password: Executing query:', query);
-        await pool.query(query);
-        const resetLink = `${req.protocol}://${req.get('host')}/reset-password.html?token=${token}`;
-        await transporter.sendMail({
-            from: process.env.EMAIL_USER,
-            to: user.email,
-            subject: 'Password Reset Request for Bychat',
-            html: `<p>You requested a password reset for your Bychat account.</p>
-                   <p>Please click this link to reset your password: <a href="${resetLink}">${resetLink}</a></p>
-                   <p>This link will expire in 1 hour.</p>
-                   <p>If you did not request this, please ignore this email.</p>
-                   <p>Regards,<br>Bychat Team</p>`
-        });
-        res.json({ success: true, message: 'If an account with that identifier exists, a password reset link has been sent.' });
-    } catch (error) {
-        console.error('Error during forgot password request:', error);
-        res.status(500).json({ success: false, message: 'An internal server error occurred. Please try again later.' });
-    }
-});
-
-app.get('/reset-password.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'reset-password.html'));
-});
-
-app.post('/reset-password', async (req, res) => {
-    const { token, newPassword } = req.body;
-    try {
-        const query = `SELECT user_id, expires_at, used FROM password_reset_tokens WHERE token = '${mysql.escape(token)}'`;
-        console.log('reset-password: Executing query:', query);
-        const [tokens] = await pool.query(query);
-        const resetToken = tokens[0];
-        if (!resetToken || resetToken.used || new Date() > new Date(resetToken.expires_at)) {
-            console.warn('Attempted password reset with invalid/expired/used token:', token);
-            return res.status(400).json({ success: false, message: 'Invalid or expired password reset link.' });
-        }
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-        const updateQuery = `UPDATE users SET password = '${mysql.escape(hashedPassword)}' WHERE id = ${resetToken.user_id}`;
-        const markUsedQuery = `UPDATE password_reset_tokens SET used = TRUE WHERE token = '${mysql.escape(token)}'`;
-        console.log('reset-password: Executing update query:', updateQuery);
-        console.log('reset-password: Executing mark used query:', markUsedQuery);
-        await pool.query(updateQuery);
-        await pool.query(markUsedQuery);
-        res.json({ success: true, message: 'Your password has been reset successfully. You can now log in.' });
-    } catch (error) {
-        console.error('Reset password error:', error);
-        res.status(500).json({ success: false, message: 'An internal server error occurred.' });
-    }
-});
-
+// Routes
 app.get('/', (req, res) => {
     if (req.session.user) {
         res.redirect('/chat.html');
@@ -171,21 +95,42 @@ app.get('/chat.html', (req, res) => {
     }
 });
 
+// Handle signup
+app.post('/signup', async (req, res) => {
+    const { username, password } = req.body;
+    try {
+        const user = await registerUser(username, password);
+        req.session.user = { id: user.id, username: user.username };
+        res.json({ success: true, message: 'User registered and logged in successfully' });
+    } catch (err) {
+        console.error('Signup error:', err.message);
+        res.status(400).json({ success: false, message: err.message });
+    }
+});
+
+// Handle login
+app.post('/login', async (req, res) => {
+    const { username, password } = req.body;
+    try {
+        const user = await loginUser(username, password);
+        req.session.user = { id: user.id, username: user.username };
+        res.json({ success: true, message: 'Login successful' });
+    } catch (err) {
+        console.error('Login error:', err.message);
+        res.status(401).json({ success: false, message: err.message });
+    }
+});
+
+// Session endpoint for frontend to check login status and get user info
 app.get('/session', (req, res) => {
     if (req.session.user) {
-        res.json({
-            loggedIn: true,
-            username: req.session.user.username,
-            userId: req.session.user.id,
-            email: req.session.user.email,
-            theme_preference: req.session.user.theme_preference,
-            chat_background_image_url: req.session.user.chat_background_image_url
-        });
+        res.json({ loggedIn: true, username: req.session.user.username, userId: req.session.user.id });
     } else {
         res.json({ loggedIn: false });
     }
 });
 
+// Logout endpoint
 app.get('/logout', (req, res) => {
     req.session.destroy(err => {
         if (err) {
@@ -193,27 +138,26 @@ app.get('/logout', (req, res) => {
             return res.status(500).json({ success: false, message: 'Could not log out' });
         }
         res.clearCookie('chat.sid');
-        res.json({ success: true, message: 'Logged out successfully!' });
-    }
+        res.json({ success: true, message: 'Logged out successfully' });
+    });
 });
 
-const connectedSockets = new Map();
-const onlineUsers = new Map();
+
+// Socket.IO connection
+const connectedSockets = new Map(); // Stores { socketId: { userId, username } }
+const onlineUsers = new Map();      // Stores { userId: { id, username } }
 
 function broadcastOnlineUsers() {
     const usersList = Array.from(onlineUsers.values());
     io.emit('online-users-list', usersList);
 }
 
+// Helper to send unread counts to a specific user's all connected sockets
 async function sendUnreadCountsToUser(userId) {
     try {
-        const parsedUserId = parseInt(userId, 10);
-        if (isNaN(parsedUserId) || parsedUserId <= 0) {
-            throw new Error('Invalid userId for sendUnreadCountsToUser');
-        }
-        const unreadCounts = await getUnreadCountsForUser(parsedUserId);
+        const unreadCounts = await getUnreadCountsForUser(userId);
         Array.from(connectedSockets.entries())
-            .filter(([, user]) => String(user.userId) === String(parsedUserId))
+            .filter(([, user]) => user.userId === userId)
             .forEach(([sockId]) => {
                 io.to(sockId).emit('initial-unread-counts', unreadCounts);
             });
@@ -222,15 +166,12 @@ async function sendUnreadCountsToUser(userId) {
     }
 }
 
+// NEW: Helper to send total unread counts to a specific user's all connected sockets
 async function sendTotalUnreadCountToUser(userId) {
     try {
-        const parsedUserId = parseInt(userId, 10);
-        if (isNaN(parsedUserId) || parsedUserId <= 0) {
-            throw new Error('Invalid userId for sendTotalUnreadCountToUser');
-        }
-        const totalUnread = await getTotalUnreadCountForUser(parsedUserId);
+        const totalUnread = await getTotalUnreadCountForUser(userId);
         Array.from(connectedSockets.entries())
-            .filter(([, user]) => String(user.userId) === String(parsedUserId))
+            .filter(([, user]) => user.userId === userId)
             .forEach(([sockId]) => {
                 io.to(sockId).emit('total-unread-count', totalUnread);
             });
@@ -239,38 +180,39 @@ async function sendTotalUnreadCountToUser(userId) {
     }
 }
 
+
 io.on('connection', async (socket) => {
     const session = socket.handshake.session;
-    if (!session.user || !session.user.id) {
+
+    if (!session.user) {
         console.log('Unauthenticated socket attempted connection, disconnecting...');
         socket.disconnect(true);
         return;
     }
+
     const { id: userId, username } = session.user;
-    const parsedUserId = parseInt(userId, 10);
-    if (isNaN(parsedUserId) || parsedUserId <= 0) {
-        console.error('Invalid userId in session:', userId);
-        socket.disconnect(true);
-        return;
-    }
-    connectedSockets.set(socket.id, { userId: parsedUserId, username });
-    const userWasAlreadyOnline = onlineUsers.has(parsedUserId);
-    onlineUsers.set(parsedUserId, { id: parsedUserId, username });
+
+    connectedSockets.set(socket.id, { userId, username });
+
+    const userWasAlreadyOnline = onlineUsers.has(userId);
+    onlineUsers.set(userId, { id: userId, username });
+
     if (!userWasAlreadyOnline) {
-        console.log(`✅ ${username} (ID: ${parsedUserId}) connected to chat`);
-        io.emit('user-joined', username);
+        console.log(`✅ ${username} (ID: ${userId}) connected to chat`);
+        io.emit('user-joined', username); // Notify others only on first connection
     } else {
-        console.log(`User ${username} (ID: ${parsedUserId}) connected an additional device/tab.`);
+        console.log(`User ${username} (ID: ${userId}) connected an additional device/tab.`);
     }
+
     broadcastOnlineUsers();
-    await sendUnreadCountsToUser(parsedUserId);
-    await sendTotalUnreadCountToUser(parsedUserId);
+    await sendUnreadCountsToUser(userId);
+    await sendTotalUnreadCountToUser(userId); // NEW: Send total unread count on connection
+
 
     socket.on('request-global-history', async () => {
         try {
-            console.log('request-global-history: Calling getLatestMessages with limit = 50');
             const chatHistory = await getLatestMessages(50);
-            console.log('request-global-history: Fetched messages count:', chatHistory.length);
+            // Ensure timestamp is ISO string if not already
             const formattedHistory = chatHistory.map(msg => ({
                 ...msg,
                 timestamp: new Date(msg.timestamp).toISOString()
@@ -283,9 +225,9 @@ io.on('connection', async (socket) => {
     });
 
     socket.on('chat-message', async (msgContent) => {
-        if (username && parsedUserId && msgContent && msgContent.message && msgContent.message.trim()) {
+        if (username && userId) {
             try {
-                await saveMessage(parsedUserId, username, msgContent.message);
+                await saveMessage(userId, username, msgContent.message);
                 const serverTimestamp = new Date().toISOString();
                 io.emit('chat-message', {
                     user: username,
@@ -296,47 +238,55 @@ io.on('connection', async (socket) => {
                 console.error('Error saving global message:', error);
                 socket.emit('system-message', 'Failed to send message. Please try again.');
             }
-        } else {
-            socket.emit('system-message', 'Message cannot be empty.');
         }
     });
 
     socket.on('private-message', async ({ recipientId, message }) => {
-        const parsedRecipientId = parseInt(recipientId, 10);
-        if (!parsedUserId || !username || !parsedRecipientId || !message || !message.trim()) {
-            console.warn('Invalid private message attempt (missing data):', { userId: parsedUserId, username, recipientId, message });
+        if (!userId || !username || !recipientId || !message.trim()) {
+            console.warn('Invalid private message attempt:', { userId, username, recipientId, message });
             socket.emit('system-message', 'Failed to send private message: Invalid data.');
             return;
         }
-        if (parsedRecipientId === parsedUserId) {
+
+        if (String(recipientId) === String(userId)) { // Ensure string comparison
             socket.emit('system-message', 'You cannot send a private message to yourself.');
             return;
         }
+
         try {
-            await savePrivateMessage(parsedUserId, parsedRecipientId, message);
-            const recipientUser = onlineUsers.get(parsedRecipientId);
-            const recipientUsername = recipientUser ? recipientUser.username : `User ${parsedRecipientId}`;
+            await savePrivateMessage(userId, recipientId, message);
+
+            const recipientUser = onlineUsers.get(recipientId);
+            const recipientUsername = recipientUser ? recipientUser.username : `User ${recipientId}`;
             const serverTimestamp = new Date().toISOString();
+
             const messageData = {
-                senderId: parsedUserId,
+                senderId: userId,
                 senderUsername: username,
-                receiverId: parsedRecipientId,
+                receiverId: recipientId,
                 receiverUsername: recipientUsername,
                 message_content: message,
                 timestamp: serverTimestamp
             };
+
+            // Emit to all sender's devices
             Array.from(connectedSockets.entries())
-                .filter(([sockId, user]) => String(user.userId) === String(parsedUserId))
+                .filter(([sockId, user]) => user.userId === userId)
                 .forEach(([sockId]) => {
                     io.to(sockId).emit('private-message-received', { ...messageData, is_my_message: true });
                 });
+
+            // Emit to all recipient's devices
             Array.from(connectedSockets.entries())
-                .filter(([sockId, user]) => String(user.userId) === String(parsedRecipientId))
+                .filter(([sockId, user]) => user.userId === recipientId)
                 .forEach(([sockId]) => {
                     io.to(sockId).emit('private-message-received', { ...messageData, is_my_message: false });
                 });
-            await sendUnreadCountsToUser(parsedRecipientId);
-            await sendTotalUnreadCountToUser(parsedRecipientId);
+
+            // Update unread counts for recipient (both individual and total)
+            await sendUnreadCountsToUser(recipientId);
+            await sendTotalUnreadCountToUser(recipientId); // NEW: Update total for recipient
+
         } catch (error) {
             console.error('Error saving or sending private message:', error);
             socket.emit('system-message', 'Failed to send private message.');
@@ -344,32 +294,32 @@ io.on('connection', async (socket) => {
     });
 
     socket.on('request-private-history', async (otherUserId) => {
-        const parsedOtherUserId = parseInt(otherUserId, 10);
-        console.log(`SERVER: Received request for private history with otherUserId: ${otherUserId} (parsed: ${parsedOtherUserId}) from userId: ${parsedUserId}`);
-        console.log('request-private-history: Input params:', { userId, otherUserId, limit: 50 });
-        if (!parsedUserId) {
+        console.log(`SERVER: Received request for private history with otherUserId: ${otherUserId} from userId: ${userId}`);
+        if (!userId) {
             socket.emit('system-message', 'Authentication required for private history.');
             return;
         }
-        if (parsedOtherUserId === parsedUserId) {
-            socket.emit('system-message', 'Cannot get private history with yourself.');
-            return;
+        if (String(otherUserId) === String(userId)) {
+             socket.emit('system-message', 'Cannot get private history with yourself.');
+             return;
         }
-        if (isNaN(parsedOtherUserId) || parsedOtherUserId <= 0) {
-            socket.emit('system-message', 'Invalid user ID for private history.');
-            return;
-        }
+
         try {
-            const history = await getPrivateMessageHistory(parsedUserId, parsedOtherUserId, 50);
-            console.log(`SERVER: Fetched private history (count: ${history.length}) for ${username} and ${parsedOtherUserId}`);
-            await markMessagesAsRead(parsedUserId, parsedOtherUserId);
-            await sendUnreadCountsToUser(parsedUserId);
-            await sendTotalUnreadCountToUser(parsedUserId);
+            const history = await getPrivateMessageHistory(userId, otherUserId, 50);
+            console.log(`SERVER: Fetched private history (count: ${history.length}) for ${username} and ${otherUserId}:`, history);
+
+            // Mark these messages as read when history is requested (user opens chat)
+            await markMessagesAsRead(userId, otherUserId);
+
+            // After marking messages as read, send updated unread counts to the current user (both individual and total)
+            await sendUnreadCountsToUser(userId);
+            await sendTotalUnreadCountToUser(userId); // NEW: Update total for current user
+
             const formattedHistory = history.map(msg => ({
                 username: msg.sender_username,
                 message_content: msg.message_content,
                 timestamp: new Date(msg.timestamp).toISOString(),
-                is_my_message: String(msg.sender_id) === String(parsedUserId)
+                is_my_message: msg.sender_id === userId
             }));
             socket.emit('private-history-loaded', formattedHistory);
         } catch (error) {
@@ -378,28 +328,31 @@ io.on('connection', async (socket) => {
         }
     });
 
+    // Handle explicit client request to mark messages as read
     socket.on('mark-private-messages-read', async (senderToMarkId) => {
-        const parsedSenderToMarkId = parseInt(senderToMarkId, 10);
-        if (!parsedUserId || !parsedSenderToMarkId) {
-            console.warn('Invalid mark-as-read attempt (missing data):', { userId: parsedUserId, senderToMarkId });
+        if (!userId || !senderToMarkId) {
+            console.warn('Invalid mark-as-read attempt:', { userId, senderToMarkId });
             return;
         }
         try {
-            console.log(`User ${username} (${parsedUserId}) marking messages from ${parsedSenderToMarkId} as read.`);
-            await markMessagesAsRead(parsedUserId, parsedSenderToMarkId);
-            await sendUnreadCountsToUser(parsedUserId);
-            await sendTotalUnreadCountToUser(parsedUserId);
+            console.log(`User ${username} (${userId}) marking messages from ${senderToMarkId} as read.`);
+            await markMessagesAsRead(userId, senderToMarkId);
+            // After marking, send updated counts to the user (both individual and total)
+            await sendUnreadCountsToUser(userId);
+            await sendTotalUnreadCountToUser(userId); // NEW: Update total for current user
         } catch (error) {
-            console.error(`Error marking messages as read for user ${parsedUserId} from ${parsedSenderToMarkId}:`, error);
+            console.error(`Error marking messages as read for user ${userId} from ${senderToMarkId}:`, error);
         }
     });
+
 
     socket.on('disconnect', () => {
         if (connectedSockets.has(socket.id)) {
             const disconnectedUser = connectedSockets.get(socket.id);
             connectedSockets.delete(socket.id);
-            const userStillOnline = Array.from(connectedSockets.values())
-                .some(user => String(user.userId) === String(disconnectedUser.userId));
+
+            const userStillOnline = Array.from(connectedSockets.values()).some(user => user.userId === disconnectedUser.userId);
+
             if (!userStillOnline) {
                 onlineUsers.delete(disconnectedUser.userId);
                 console.log(`❌ ${disconnectedUser.username} (ID: ${disconnectedUser.userId}) disconnected`);
@@ -408,6 +361,8 @@ io.on('connection', async (socket) => {
                 console.log(`User ${disconnectedUser.username} disconnected one of their tabs/devices.`);
             }
             broadcastOnlineUsers();
+            // No need to send unread counts on disconnect, as the user is gone.
+            // If they reconnect, sendTotalUnreadCountToUser will be called.
         }
     });
 });
@@ -415,5 +370,4 @@ io.on('connection', async (socket) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`🚀 Server running at http://localhost:${PORT}`);
-    console.log(`Serving static files from: ${path.join(__dirname, 'public')}`);
 });
