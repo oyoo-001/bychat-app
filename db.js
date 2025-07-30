@@ -102,6 +102,8 @@ async function saveUserPreferences(userId, themePreference, chatBackgroundImageU
     }
 }
 
+// ... (keep the initial connection code the same) ...
+
 // --- MESSAGE FUNCTIONS ---
 async function saveMessage(userId, username, messageContent) {
     try {
@@ -118,8 +120,8 @@ async function saveMessage(userId, username, messageContent) {
 
 async function getLatestMessages(limit = 100) {
     try {
-        // Ensure 'limit' is a valid integer before it's passed to the query.
-        const queryLimit = parseInt(limit, 10) || 100;
+        // More robust limit handling
+        const queryLimit = Math.min(Math.max(parseInt(limit, 10) || 100, 1), 1000); // Clamp between 1-1000
 
         const [rows] = await db.execute(
             'SELECT username, message_content, timestamp FROM global_messages ORDER BY timestamp DESC LIMIT ?',
@@ -128,7 +130,7 @@ async function getLatestMessages(limit = 100) {
         return rows.reverse();
     } catch (error) {
         console.error('Error getting latest global messages:', error.message);
-        throw error;
+        throw new Error('Failed to fetch messages');
     }
 }
 
@@ -147,12 +149,18 @@ async function savePrivateMessage(senderId, receiverId, messageContent) {
 
 async function getPrivateMessageHistory(user1Id, user2Id, limit = 50) {
     try {
-        const queryLimit = parseInt(limit, 10) || 50;
+        // More robust parameter validation
+        if (!user1Id || !user2Id) throw new Error('Missing user IDs');
+
+        const queryLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 500); // Clamp between 1-500
+
         const [rows] = await db.execute(
-            `SELECT pm.message_content, pm.timestamp, u_sender.username AS sender_username, pm.sender_id, pm.receiver_id, pm.is_read
+            `SELECT pm.message_content, pm.timestamp, u_sender.username AS sender_username,
+                    pm.sender_id, pm.receiver_id, pm.is_read
              FROM private_messages pm
              JOIN users u_sender ON pm.sender_id = u_sender.id
-             WHERE (pm.sender_id = ? AND pm.receiver_id = ?) OR (pm.sender_id = ? AND pm.receiver_id = ?)
+             WHERE (pm.sender_id = ? AND pm.receiver_id = ?)
+                OR (pm.sender_id = ? AND pm.receiver_id = ?)
              ORDER BY pm.timestamp ASC
              LIMIT ?`,
             [user1Id, user2Id, user2Id, user1Id, queryLimit]
@@ -160,60 +168,11 @@ async function getPrivateMessageHistory(user1Id, user2Id, limit = 50) {
         return rows;
     } catch (error) {
         console.error('Error getting private message history:', error.message);
-        throw error;
+        throw new Error('Failed to fetch private messages');
     }
 }
 
-async function getUnreadCountsForUser(userId) {
-    try {
-        const [rows] = await db.execute(
-            `SELECT sender_id, COUNT(*) AS unread_count
-             FROM private_messages
-             WHERE receiver_id = ? AND is_read = FALSE
-             GROUP BY sender_id`,
-            [userId]
-        );
-
-        const unreadCounts = {};
-        rows.forEach(row => {
-            unreadCounts[row.sender_id] = parseInt(row.unread_count, 10);
-        });
-        return unreadCounts;
-    } catch (error) {
-        console.error('Error getting unread counts for user:', error.message);
-        throw error;
-    }
-}
-
-async function getTotalUnreadCountForUser(userId) {
-    try {
-        const [rows] = await db.execute(
-            `SELECT COUNT(*) AS total_unread_count
-             FROM private_messages
-             WHERE receiver_id = ? AND is_read = FALSE`,
-            [userId]
-        );
-        return rows[0] ? parseInt(rows[0].total_unread_count, 10) : 0;
-    } catch (error) {
-        console.error('Error getting total unread count for user:', error.message);
-        throw error;
-    }
-}
-
-async function markMessagesAsRead(receiverId, senderId) {
-    try {
-        const [result] = await db.execute(
-            `UPDATE private_messages
-             SET is_read = TRUE
-             WHERE receiver_id = ? AND sender_id = ? AND is_read = FALSE`,
-            [receiverId, senderId]
-        );
-        return result.affectedRows;
-    } catch (error) {
-        console.error('Error marking messages as read:', error.message);
-        throw error;
-    }
-}
+// ... (keep the rest of the file the same) ...
 
 module.exports = {
     db,
