@@ -1,6 +1,7 @@
 // db.js
-const mysql = require('mysql2/promise');
 
+   // --- FORCING GIT TO SEE A CHANGE (TEMPORARY) ---
+  const mysql = require('mysql2/promise');
 // Get the full DATABASE_URL from environment variables
 const dbConnectionString = process.env.DATABASE_URL;
 
