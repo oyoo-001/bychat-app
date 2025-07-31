@@ -1,211 +1,100 @@
-const mysql = require('mysql2/promise');
-require('dotenv').config(); // Load environment variables here
+import mysql from 'mysql2/promise';
 
+// Create database connection pool
 const pool = mysql.createPool({
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '', // Use DB_PASSWORD from .env
-    database: process.env.DB_NAME || 'chat_app',
-    port: process.env.DB_PORT || 3306, // Use DB_PORT from .env, fallback to 3306
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
+  host: 'monorail.proxy.rlwy.net',
+  user: 'root',
+  password: 'fD0HTuXULtFqk0H2yQn5',
+  database: 'railway',
+  port: 25312,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
 });
-   
-// Test the connection
-pool.getConnection()
-    .then(connection => {
-        console.log('✅ Connected to MySQL database!');
-        connection.release(); // Release the connection immediately after testing
-    })
-    .catch(err => {
-        console.error('❌ Error connecting to MySQL database:', err.message);
-        process.exit(1); // Exit the process if unable to connect to the database
-    });
 
-// Function to register a new user
-async function registerUser(username, hashedPassword) {
-    try {
-        const [result] = await pool.execute(
-            'INSERT INTO users (username, password) VALUES (?, ?)', // CHANGED: password_hash -> password
-            [username, hashedPassword]
-        );
-        return { id: result.insertId, username };
-    } catch (error) {
-        console.error('Error in registerUser:', error.message);
-        if (error.code === 'ER_DUP_ENTRY') { // MySQL unique violation error code
-            throw new Error('Username already exists');
-        }
-        throw error; // Re-throw other errors
-    }
+// User authentication
+export async function authenticateUser(username, password) {
+  const [rows] = await pool.execute(
+    'SELECT * FROM users WHERE username = ? AND password = ?',
+    [username, password]
+  );
+  return rows[0];
 }
 
-// Function to find a user by username
-async function findUserByUsername(username) {
-    try {
-        const [rows] = await pool.execute(
-            'SELECT id, username, password, theme_preference, chat_background_image_url FROM users WHERE username = ?', // CHANGED: password_hash -> password
-            [username]
-        );
-        return rows[0]; // Returns the first row (user object) or undefined if not found
-    } catch (error) {
-        console.error('Error in findUserByUsername:', error.message);
-        throw error;
-    }
+// Create user
+export async function createUser(username, password) {
+  const [result] = await pool.execute(
+    'INSERT INTO users (username, password) VALUES (?, ?)',
+    [username, password]
+  );
+  return result.insertId;
 }
 
-// Function to save a chat message (global)
-async function saveMessage(userId, username, messageContent) {
-    try {
-        const [result] = await pool.execute(
-            'INSERT INTO global_messages (user_id, username, message_content) VALUES (?, ?, ?)',
-            [userId, username, messageContent]
-        );
-        return result.insertId;
-    } catch (error) {
-        console.error('Error saving global message:', error.message);
-        throw error;
-    }
+// Save global chat message
+export async function saveMessage(username, message) {
+  const [result] = await pool.execute(
+    'INSERT INTO global_messages (username, message_content) VALUES (?, ?)',
+    [username, message]
+  );
+  return result.insertId;
 }
 
-// Function to get the latest chat messages (global)
-async function getLatestMessages(limit = 100) {
-    try {
-        const parsedLimit = parseInt(limit, 10); // Ensure limit is an integer
-        if (isNaN(parsedLimit) || parsedLimit <= 0) {
-            throw new Error('Invalid limit value: must be a positive integer');
-        }
-        console.log('getLatestMessages: Executing with limit =', parsedLimit); // Debug log
-        const [rows] = await pool.execute(
-            'SELECT username, message_content, timestamp FROM global_messages ORDER BY timestamp DESC LIMIT ?',
-            [parsedLimit]
-        );
-        return rows.reverse(); // Return in ascending order (oldest first)
-    } catch (error) {
-        console.error('Error getting latest global messages:', error.message);
-        throw error;
-    }
+// Get latest global chat messages
+export async function getLatestMessages(limit = 50) {
+  const parsedLimit = parseInt(limit, 10);
+  const [rows] = await pool.execute(
+    'SELECT username, message_content, timestamp FROM global_messages ORDER BY timestamp DESC LIMIT ?',
+    [parsedLimit]
+  );
+  return rows;
 }
 
-// Function to save a private message
-async function savePrivateMessage(senderId, receiverId, messageContent) {
-    try {
-        const [result] = await pool.execute(
-            'INSERT INTO private_messages (sender_id, receiver_id, message_content, is_read) VALUES (?, ?, ?, FALSE)',
-            [senderId, receiverId, messageContent]
-        );
-        return result.insertId;
-    } catch (error) {
-        console.error('Error saving private message:', error.message);
-        throw error;
-    }
+// Save private message
+export async function savePrivateMessage(senderId, receiverId, message, isRead = false) {
+  const [result] = await pool.execute(
+    'INSERT INTO private_messages (sender_id, receiver_id, message_content, is_read) VALUES (?, ?, ?, ?)',
+    [senderId, receiverId, message, isRead]
+  );
+  return result.insertId;
 }
 
-// Function to get private message history between two users
-async function getPrivateMessageHistory(user1Id, user2Id, limit = 50) {
-    try {
-        const parsedUser1Id = parseInt(user1Id, 10);
-        const parsedUser2Id = parseInt(user2Id, 10);
-        const parsedLimit = parseInt(limit, 10);
-        if (isNaN(parsedUser1Id) || isNaN(parsedUser2Id) || isNaN(parsedLimit) || parsedLimit <= 0) {
-            throw new Error('Invalid parameters: user1Id, user2Id, and limit must be positive integers');
-        }
-        console.log('getPrivateMessageHistory: Executing with user1Id =', parsedUser1Id, 'user2Id =', parsedUser2Id, 'limit =', parsedLimit); // Debug log
-        const [rows] = await pool.execute(
-            `SELECT
-                pm.message_content,
-                pm.timestamp,
-                u_sender.username AS sender_username,
-                pm.sender_id,
-                pm.receiver_id,
-                pm.is_read
-            FROM
-                private_messages pm
-            JOIN
-                users u_sender ON pm.sender_id = u_sender.id
-            WHERE
-                (pm.sender_id = ? AND pm.receiver_id = ?) OR
-                (pm.sender_id = ? AND pm.receiver_id = ?)
-            ORDER BY
-                pm.timestamp ASC
-            LIMIT ?`,
-            [parsedUser1Id, parsedUser2Id, parsedUser2Id, parsedUser1Id, parsedLimit]
-        );
-        return rows;
-    } catch (error) {
-        console.error('Error getting private message history:', error.message);
-        throw error;
-    }
+// Get private chat history between two users
+export async function getPrivateMessageHistory(user1Id, user2Id, limit = 50) {
+  const parsedLimit = parseInt(limit, 10);
+  const [rows] = await pool.execute(
+    `SELECT
+        pm.message_content,
+        pm.timestamp,
+        u_sender.username AS sender_username,
+        pm.sender_id,
+        pm.receiver_id,
+        pm.is_read
+     FROM private_messages pm
+     JOIN users u_sender ON pm.sender_id = u_sender.id
+     WHERE
+       (pm.sender_id = ? AND pm.receiver_id = ?) OR
+       (pm.sender_id = ? AND pm.receiver_id = ?)
+     ORDER BY pm.timestamp ASC
+     LIMIT ?`,
+    [user1Id, user2Id, user2Id, user1Id, parsedLimit]
+  );
+  return rows;
 }
 
-// Function to get unread counts for a specific user from all other users
-async function getUnreadCountsForUser(userId) {
-    try {
-        const [rows] = await pool.execute(
-            `SELECT
-                sender_id,
-                COUNT(*) AS unread_count
-            FROM
-                private_messages
-            WHERE
-                receiver_id = ? AND is_read = FALSE
-            GROUP BY
-                sender_id`,
-            [userId]
-        );
-
-        const unreadCounts = {};
-        rows.forEach(row => {
-            unreadCounts[row.sender_id] = parseInt(row.unread_count, 10); // Ensure count is a number
-        });
-        return unreadCounts;
-    } catch (error) {
-        console.error('Error getting unread counts for user:', error.message);
-        throw error;
-    }
+// Mark private messages as read
+export async function markMessagesAsRead(senderId, receiverId) {
+  const [result] = await pool.execute(
+    'UPDATE private_messages SET is_read = true WHERE sender_id = ? AND receiver_id = ? AND is_read = false',
+    [senderId, receiverId]
+  );
+  return result.affectedRows;
 }
 
-// Function to get the total number of unread messages for a user
-async function getTotalUnreadCountForUser(userId) {
-    try {
-        const [rows] = await pool.execute(
-            `SELECT COUNT(*) AS total_unread_count
-            FROM private_messages
-            WHERE receiver_id = ? AND is_read = FALSE`,
-            [userId]
-        );
-        return rows[0] ? parseInt(rows[0].total_unread_count, 10) : 0;
-    } catch (error) {
-        console.error('Error getting total unread count for user:', error.message);
-        throw error;
-    }
+// Get all users except one
+export async function getAllUsersExcept(userId) {
+  const [rows] = await pool.execute(
+    'SELECT id, username FROM users WHERE id != ?',
+    [userId]
+  );
+  return rows;
 }
-
-// Function to mark messages as read for a specific recipient from a specific sender
-async function markMessagesAsRead(receiverId, senderId) {
-    try {
-        const [result] = await pool.execute(
-            `UPDATE private_messages
-            SET is_read = TRUE
-            WHERE receiver_id = ? AND sender_id = ? AND is_read = FALSE`,
-            [receiverId, senderId]
-        );
-        return result.affectedRows;
-    } catch (error) {
-        console.error('Error marking messages as read:', error.message);
-        throw error;
-    }
-}
-
-module.exports = {
-    pool,
-    registerUser,
-    findUserByUsername,
-    saveMessage,
-    getLatestMessages,
-    savePrivateMessage,
-    getPrivateMessageHistory,
-    getUnreadCountsForUser,
-    getTotalUnreadCountForUser,
-    markMessagesAsRead
-};
