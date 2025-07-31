@@ -97,7 +97,7 @@ async function findUserByIdentifier(identifier) {
 async function saveMessage(userId, username, messageContent) {
     try {
         await pool.query(
-            'INSERT INTO messages (sender_id, sender_username, message_content) VALUES (?, ?, ?)',
+            'INSERT INTO global_messages (sender_id, sender_username, message_content) VALUES (?, ?, ?)',
             [userId, username, messageContent]
         );
     } catch (error) {
@@ -115,7 +115,7 @@ async function getLatestMessages(limit = 50) {
     try {
         const [rows] = await pool.query(
             `SELECT sender_username AS username, message_content AS message, timestamp
-             FROM messages
+             FROM global_messages
              ORDER BY timestamp DESC
              LIMIT ?`,
             [limit]
@@ -127,12 +127,13 @@ async function getLatestMessages(limit = 50) {
     }
 }
 
+
 /*
-  Saves a private message.
-  @param {number} senderId - The ID of the sender.
- @param {number} receiverId - The ID of the receiver.
- @param {string} messageContent - The content of the message.
-*/
+ * Saves a private message.
+ * @param {number} senderId - The ID of the sender.
+ * @param {number} receiverId - The ID of the receiver.
+ * @param {string} messageContent - The content of the message.
+ */
 async function savePrivateMessage(senderId, receiverId, messageContent) {
     try {
         await pool.query(
