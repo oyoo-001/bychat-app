@@ -96,6 +96,9 @@ async function findUserByIdentifier(identifier) {
  */
 async function saveMessage(userId, username, messageContent) {
     try {
+        // --- Added for debugging ---
+        console.log(`DEBUG: Saving global message - userId: ${userId}, username: ${username}, messageContent: ${messageContent}`);
+
         await pool.query(
             'INSERT INTO global_messages (sender_id, sender_username, message_content) VALUES (?, ?, ?)',
             [userId, username, messageContent]
@@ -113,13 +116,18 @@ async function saveMessage(userId, username, messageContent) {
  */
 async function getLatestMessages(limit = 50) {
     try {
+        // Corrected: Removed the 'AS message' alias to be consistent with client-side code
         const [rows] = await pool.query(
-            `SELECT sender_username AS username, message_content AS message, timestamp
+            `SELECT sender_username AS username, message_content, timestamp
              FROM global_messages
              ORDER BY timestamp DESC
              LIMIT ?`,
             [limit]
         );
+
+        // --- Added for debugging ---
+        console.log('DEBUG: Data fetched from DB for global messages:', rows);
+
         return rows.reverse(); // Return in chronological order
     } catch (error) {
         console.error('Error fetching latest messages:', error);
