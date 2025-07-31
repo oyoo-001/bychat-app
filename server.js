@@ -194,7 +194,7 @@ app.get('/logout', (req, res) => {
         }
         res.clearCookie('chat.sid');
         res.json({ success: true, message: 'Logged out successfully!' });
-    }
+    } )
 });
 
 const connectedSockets = new Map();
