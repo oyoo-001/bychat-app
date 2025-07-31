@@ -282,24 +282,45 @@ io.on('connection', async (socket) => {
         }
     });
 
-    socket.on('chat-message', async (msgContent) => {
-        if (username && parsedUserId && msgContent && msgContent.message && msgContent.message.trim()) {
-            try {
-                await saveMessage(parsedUserId, username, msgContent.message);
-                const serverTimestamp = new Date().toISOString();
-                io.emit('chat-message', {
-                    user: username,
-                    message: msgContent.message,
-                    timestamp: serverTimestamp
-                });
-            } catch (error) {
-                console.error('Error saving global message:', error);
-                socket.emit('system-message', 'Failed to send message. Please try again.');
-            }
-        } else {
-            socket.emit('system-message', 'Message cannot be empty.');
+   // This is a replacement for your existing 'chat-message' socket handler
+socket.on('chat-message', async (messageData) => {
+    // Determine the message content. It could be a string or an object from the client.
+    let messageContent = '';
+    if (typeof messageData === 'string') {
+        messageContent = messageData;
+    } else if (messageData && typeof messageData === 'object' && messageData.message) {
+        messageContent = messageData.message;
+    }
+
+    // Trim the message content and check if it is not empty
+    const trimmedMessage = messageContent ? messageContent.trim() : '';
+
+    // Log the message content for debugging purposes
+    console.log(`DEBUG: Received global message from ${username} (ID: ${parsedUserId}). Content: "${trimmedMessage}"`);
+
+    if (username && parsedUserId && trimmedMessage) {
+        try {
+            // Save the message to the database
+            await saveMessage(parsedUserId, username, trimmedMessage);
+
+            // Get a server-side timestamp for consistency
+            const serverTimestamp = new Date().toISOString();
+
+            // Emit the message to all connected clients
+            io.emit('chat-message', {
+                user: username,
+                message: trimmedMessage,
+                timestamp: serverTimestamp
+            });
+        } catch (error) {
+            console.error('Error saving global message:', error);
+            socket.emit('system-message', 'Failed to send message. Please try again.');
         }
-    });
+    } else {
+        socket.emit('system-message', 'Message cannot be empty.');
+    }
+});
+
 
     socket.on('private-message', async ({ recipientId, message }) => {
         const parsedRecipientId = parseInt(recipientId, 10);
