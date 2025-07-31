@@ -1,30 +1,37 @@
-require('dotenv').config();
-const mysql = require('mysql2/promise'); // Using mysql2/promise for async/await support
+// db.js
+// This file sets up the database connection pool and exports functions
+// for interacting with the database. It uses environment variables
+// to securely manage credentials, which is best practice for production.
 
-// IMPORTANT: For production, please use environment variables for these credentials.
-// The code below is hardcoded with your provided values for immediate use.
+require('dotenv').config();
+const mysql = require('mysql2/promise');
+
+// Create the database connection pool using environment variables
+// Fallback values are provided for local development.
 const pool = mysql.createPool({
-    host: 'monorail.proxy.rlwy.net',
-    user: 'root',
-    password: 'fD0HTuXULtFqk0H2yQn5',
-    database: 'railway',
-    port: 25312,
+    host: process.env.DB_HOST || 'localhost',
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'chat_app',
+    port: process.env.DB_PORT || 3306,
     waitForConnections: true,
-    connectionLimit: 10, // Adjust as needed
-    queueLimit: 0
+    connectionLimit: 10,
+    queueLimit: 0,
 });
 
 // Test the database connection on startup
 pool.getConnection()
     .then(connection => {
-        console.log('✅ Connected to MySQL database on Railway.app!');
+        console.log('✅ Connected to MySQL database!');
         connection.release(); // Release the connection back to the pool
     })
     .catch(err => {
         console.error('❌ Error connecting to database:', err.message);
         // It's crucial to exit the application if the database connection fails on startup
+        // This prevents the server from running without a database connection.
         process.exit(1);
     });
+
 
 // --- Database Interaction Functions ---
 
@@ -120,12 +127,12 @@ async function getLatestMessages(limit = 50) {
     }
 }
 
-/**
- * Saves a private message.
- * @param {number} senderId - The ID of the sender.
- * @param {number} receiverId - The ID of the receiver.
- * @param {string} messageContent - The content of the message.
- */
+/*
+  Saves a private message.
+  @param {number} senderId - The ID of the sender.
+ @param {number} receiverId - The ID of the receiver.
+ @param {string} messageContent - The content of the message.
+*/
 async function savePrivateMessage(senderId, receiverId, messageContent) {
     try {
         await pool.query(
@@ -229,7 +236,7 @@ async function markMessagesAsRead(receiverId, senderId) {
     }
 }
 
-// Export all the necessary functions and the connection pool
+// Export the database connection pool and all interaction functions
 module.exports = {
     pool,
     registerUser,
