@@ -1328,29 +1328,42 @@
             messageInput.value = '';
         });
 
-        socket.on('chat-history', (history) => {
-            if (currentChatPartner === null) {
-                clearChatContainer();
-                history.forEach(msg => {
-                    appendMessage(msg.username, msg.message_content, false, msg.timestamp);
-                });
-            }
-        });
+        // Corrected client-side event handlers
 
-        socket.on('chat-message', ({ user, message, timestamp }) => {
-            if (currentChatPartner === null) {
-                appendMessage(user, message, false, timestamp);
-            }
+// Event handler for loading global chat history
+socket.on('chat-history', (history) => {
+    // Only update global chat if no private chat is active
+    if (currentChatPartner === null) {
+        clearChatContainer();
+        history.forEach(msg => {
+            // Corrected: use msg.message instead of msg.message_content
+            appendMessage(msg.username, msg.message, false, msg.timestamp);
         });
+    }
+});
 
-        socket.on('private-history-loaded', (history) => {
-            if (currentChatPartner !== null) {
-                clearChatContainer();
-                history.forEach(msg => {
-                    appendMessage(msg.username, msg.message_content, false, msg.timestamp);
-                });
-            }
+// Event handler for a new global chat message
+socket.on('chat-message', ({ user, message, timestamp }) => {
+    // Only display global chat messages if no private chat is active
+    if (currentChatPartner === null) {
+        // Corrected: The de-structured 'message' property is already correct
+        appendMessage(user, message, false, timestamp);
+    }
+});
+
+// Event handler for loading private chat history
+socket.on('private-history-loaded', (history) => {
+    // Only update private chat if a chat partner is selected
+    if (currentChatPartner !== null) {
+        clearChatContainer();
+        history.forEach(msg => {
+            // Corrected: use msg.message_content as sent from the server's private history query
+            // The server's `getPrivateMessageHistory` function does not alias this.
+            appendMessage(msg.username, msg.message_content, msg.timestamp);
         });
+    }
+});
+
 
         socket.on('private-message-received', (messageData) => {
             const { senderId, senderUsername, receiverId, message_content, timestamp } = messageData;
