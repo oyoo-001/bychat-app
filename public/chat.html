@@ -1343,11 +1343,11 @@ socket.on('chat-history', (history) => {
 });
 
 // Event handler for a new global chat message
-socket.on('chat-message', ({ user, message, timestamp }) => {
+socket.on('chat-message', ({ user, message_content, timestamp }) => {
     // Only display global chat messages if no private chat is active
     if (currentChatPartner === null) {
         // Corrected: The de-structured 'message' property is already correct
-        appendMessage(user, message, false, timestamp);
+        appendMessage(user, message_content, false, timestamp);
     }
 });
 
