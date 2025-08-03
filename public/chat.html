@@ -1065,692 +1065,644 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        const socket = io();
-        const chatContainer = document.getElementById('chat-container');
-        const messageForm = document.getElementById('message-form');
-        const messageInput = document.getElementById('message-input');
-        const userList = document.getElementById('user-list');
-        const chatTitle = document.getElementById('chat-title');
-        const globalChatItem = document.getElementById('global-chat-item');
-        const sidebarToggle = document.getElementById('sidebar-toggle');
-        const sidebar = document.getElementById('sidebar');
-        const sidebarOverlay = document.getElementById('sidebar-overlay');
-        const notificationBellBadge = document.getElementById('total-unread-badge');
-        const emojiButton = document.getElementById('emoji-button');
-        const emojiPickerContainer = document.getElementById('emoji-picker-container');
+        // This file contains the client-side logic for the chat application.
+// It handles user interactions, WebSocket communication, and UI updates.
 
-        const voiceChatButton = document.getElementById('voice-chat-button');
+const socket = io();
+const chatContainer = document.getElementById('chat-container');
+const messageForm = document.getElementById('message-form');
+const messageInput = document.getElementById('message-input');
+const userList = document.getElementById('user-list');
+const chatTitle = document.getElementById('chat-title');
+const globalChatItem = document.getElementById('global-chat-item');
+const sidebarToggle = document.getElementById('sidebar-toggle');
+const sidebar = document.getElementById('sidebar');
+const sidebarOverlay = document.getElementById('sidebar-overlay');
+const notificationBellBadge = document.getElementById('total-unread-badge');
+const emojiButton = document.getElementById('emoji-button');
+const emojiPickerContainer = document.getElementById('emoji-picker-container');
+
+const voiceChatButton = document.getElementById('voice-chat-button');
+const addItemButton = document.getElementById('add-item-button');
+const settingsButton = document.getElementById('settings-button');
+
+// NEW: Settings Modal Elements
+const settingsModal = document.getElementById('settings-modal');
+const settingsCloseBtn = document.getElementById('settings-close-btn');
+const themeSelect = document.getElementById('theme-select');
+const themeOptionBoxes = document.querySelectorAll('.theme-option-box');
+const backgroundImageUpload = document.getElementById('background-image-upload');
+const setBackgroundBtn = document.getElementById('set-background-btn');
+const clearBackgroundBtn = document.getElementById('clear-background-btn');
+const addGroupBtn = document.getElementById('add-group-btn');
+
+let currentUsername = null;
+let currentUserId = null;
+let currentChatPartner = null;
+
+const clientUnreadCountsDisplay = new Map();
+
+const commonEmojis = [
+    '😀', '😁', '😂', '🤣', '😃', '😄', '😅', '😆', '😉', '😊',
+    '😋', '😎', '😍', '😘', '😗', '😙', '😚', '🙂', '🤗', '🤩',
+    '🤔', '🤨', '😐', '😑', '😶', '😏', '😒', '🙄', '😬', '🤥',
+    '😌', '😔', '😪', '🤤', '😴', '😷', '🤒', '🤕', '🤢', '🤮',
+    '🤧', '🥵', '🥶', '😵', '🤯', '🤠', '🥳', '🥰', '🥺', '🤯',
+    '👍', '👎', '👏', '👋', '🙏', '✌️', '💪', '🔥', '❤️', '💔',
+    '🎉', '🎊', '💯', '✨', '⚡', '🌟', '💫', '☀️', '🌈', '🌧️',
+    '🍎', '🍌', '�', '🍕', '🍔', '🍟', '🍦', '🍩', '☕', '🍺',
+    '🚗', '🚕', '🚌', '🚆', '✈️', '🚢', '🚀', '🏠', '🏢', '🏫',
+    '🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯',
+];
+
+// --- Utility Functions ---
+function clearChatContainer() {
+    chatContainer.innerHTML = '';
+}
+
+function setActiveUserItem(targetId) {
+    document.querySelectorAll('.user-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    if (targetId === 'global') {
+        globalChatItem.classList.add('active');
+    } else {
+        const userItem = document.querySelector(`.user-item[data-user-id="${targetId}"]`);
+        if (userItem) {
+            userItem.classList.add('active');
+        }
+    }
+}
+
+function formatTimestamp(isoString) {
+    const date = new Date(isoString);
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    return `${hours}:${minutes}`;
+}
+
+function appendMessage(sender, message, isSystem = false, timestamp = null) {
+    const messageRow = document.createElement('div');
+    messageRow.classList.add('message-row');
+
+    const messageBubble = document.createElement('div');
+    messageBubble.classList.add('message-bubble');
+
+    if (isSystem) {
+        messageRow.classList.add('system-message-row');
+        messageBubble.classList.add('system-message-bubble');
+        messageBubble.textContent = message;
+    } else {
+        const messageContent = document.createElement('span');
+        messageContent.textContent = message;
+        messageBubble.appendChild(messageContent);
+
+        if (timestamp) {
+            const timestampSpan = document.createElement('span');
+            timestampSpan.classList.add('message-timestamp');
+            timestampSpan.textContent = formatTimestamp(timestamp);
+            messageBubble.appendChild(timestampSpan);
+        }
+
+        if (sender === currentUsername) {
+            messageRow.classList.add('my-message-row');
+            messageBubble.classList.add('my-message-bubble');
+        } else {
+            messageRow.classList.add('other-message-row');
+            messageBubble.classList.add('other-message-bubble');
+            const senderSpan = document.createElement('span');
+            senderSpan.classList.add('message-sender');
+            senderSpan.textContent = sender;
+            messageBubble.prepend(senderSpan);
+        }
+    }
+    messageRow.appendChild(messageBubble);
+    chatContainer.appendChild(messageRow);
+
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+function updateUnreadCountDisplay(userId, count) {
+    const userItem = document.querySelector(`.user-item[data-user-id="${userId}"]`);
+    if (!userItem) return;
+
+    let badge = userItem.querySelector('.unread-badge');
+    if (count > 0) {
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.classList.add('unread-badge');
+            userItem.appendChild(badge);
+        }
+        badge.textContent = count > 99 ? '99+' : count;
+        if (count >= 10) {
+            badge.classList.add('two-digits');
+        } else {
+            badge.classList.remove('two-digits');
+        }
+    } else {
+        if (badge) {
+            badge.remove();
+        }
+    }
+}
+
+function updateTotalUnreadBell(count) {
+    if (count > 0) {
+        notificationBellBadge.textContent = count > 99 ? '99+' : count;
+        notificationBellBadge.classList.add('visible');
+        if (count >= 10) {
+            notificationBellBadge.classList.add('two-digits');
+        } else {
+            notificationBellBadge.classList.remove('two-digits');
+        }
+    } else {
+        notificationBellBadge.classList.remove('visible', 'two-digits');
+        notificationBellBadge.textContent = '0';
+    }
+}
+
+function switchChat(targetUser = null) {
+    currentChatPartner = targetUser;
+    clearChatContainer();
+
+    if (targetUser === null) {
+        chatTitle.textContent = 'Global Chat Room';
+        socket.emit('request-global-history');
+        setActiveUserItem('global');
+        voiceChatButton.style.display = 'none';
+    } else {
+        chatTitle.textContent = `Chat with ${targetUser.username}`;
+        socket.emit('request-private-history', targetUser.id);
+        setActiveUserItem(targetUser.id);
+        socket.emit('mark-private-messages-read', targetUser.id);
+        voiceChatButton.style.display = '';
+    }
+    if (window.innerWidth <= 768) {
+        sidebar.classList.remove('open');
+        sidebarOverlay.classList.remove('visible');
+    }
+}
+
+globalChatItem.addEventListener('click', () => {
+    switchChat(null);
+});
+
+function renderOnlineUsers(users) {
+    let activeUserId = currentChatPartner ? currentChatPartner.id : 'global';
+
+    const otherUsers = users.filter(user => user.id !== currentUserId);
+
+    const itemsToRemove = Array.from(userList.children).filter(child => child.id !== 'global-chat-item');
+    itemsToRemove.forEach(item => userList.removeChild(item));
+
+    otherUsers.sort((a, b) => a.username.localeCompare(b.username));
+
+    otherUsers.forEach(user => {
+        const li = document.createElement('li');
+        li.classList.add('user-item');
+        li.dataset.userId = user.id;
+        li.dataset.username = user.username;
+
+        li.addEventListener('click', () => {
+            switchChat(user);
+        });
+
+        const statusDot = document.createElement('span');
+        statusDot.classList.add('user-item-status');
+        li.appendChild(statusDot);
+
+        const userNameSpan = document.createElement('span');
+        userNameSpan.classList.add('user-item-name');
+        userNameSpan.textContent = user.username;
+        li.appendChild(userNameSpan);
+
+        userList.appendChild(li);
+
+        const currentUnread = clientUnreadCountsDisplay.get(user.id) || 0;
+        updateUnreadCountDisplay(user.id, currentUnread);
+    });
+
+    setActiveUserItem(activeUserId);
+}
+
+// --- Initial Session and Settings Load ---
+fetch('/session')
+    .then(res => res.json())
+    .then(data => {
+        if (data.loggedIn && data.username && data.userId) {
+            currentUsername = data.username;
+            currentUserId = data.userId;
+            voiceChatButton.style.display = 'none';
 
 
-        const addItemButton = document.getElementById('add-item-button');
-        const settingsButton = document.getElementById('settings-button');
+            // Load user settings from the server
+            loadUserSettings();
+            switchChat(null);
+        } else {
+            window.location.href = '/login.html';
+        }
+    })
+    .catch(error => {
+        console.error('Error checking session:', error);
+        window.location.href = '/login.html';
+    });
 
-        // NEW: Settings Modal Elements
-        const settingsModal = document.getElementById('settings-modal');
-        const settingsCloseBtn = document.getElementById('settings-close-btn');
-        const themeSelect = document.getElementById('theme-select');
-        const themeOptionBoxes = document.querySelectorAll('.theme-option-box');
-        const backgroundImageUpload = document.getElementById('background-image-upload');
-        const setBackgroundBtn = document.getElementById('set-background-btn');
-        const clearBackgroundBtn = document.getElementById('clear-background-btn');
-        const addGroupBtn = document.getElementById('add-group-btn');
+messageForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const msg = messageInput.value.trim();
+    if (!msg || !currentUsername || !currentUserId) return;
 
-        let currentUsername = null;
-        let currentUserId = null;
-        let currentChatPartner = null;
+    const messagePayload = {
+        message: msg
+    };
 
-        const clientUnreadCountsDisplay = new Map();
+    if (currentChatPartner === null) {
+        socket.emit('chat-message', messagePayload);
+    } else {
+        socket.emit('private-message', {
+            recipientId: currentChatPartner.id,
+            message: messagePayload.message
+        });
+    }
+    messageInput.value = '';
+});
 
-        const commonEmojis = [
-            '😀', '😁', '😂', '🤣', '😃', '😄', '😅', '😆', '😉', '😊',
-            '😋', '😎', '😍', '😘', '😗', '😙', '😚', '🙂', '🤗', '🤩',
-            '🤔', '🤨', '😐', '😑', '😶', '😏', '😒', '🙄', '😬', '🤥',
-            '😌', '😔', '😪', '🤤', '😴', '😷', '🤒', '🤕', '🤢', '🤮',
-            '🤧', '🥵', '🥶', '😵', '🤯', '🤠', '🥳', '🥰', '🥺', '🤯',
-            '👍', '👎', '👏', '👋', '🙏', '✌️', '💪', '🔥', '❤️', '💔',
-            '🎉', '🎊', '💯', '✨', '⚡', '🌟', '💫', '☀️', '🌈', '🌧️',
-            '🍎', '🍌', '🍓', '🍕', '🍔', '🍟', '🍦', '🍩', '☕', '🍺',
-            '🚗', '🚕', '🚌', '🚆', '✈️', '🚢', '🚀', '🏠', '🏢', '🏫',
-            '🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯',
-        ];
-
-        // --- Utility Functions ---
-        function clearChatContainer() {
-            chatContainer.innerHTML = '';
-        }
-
-        function setActiveUserItem(targetId) {
-            document.querySelectorAll('.user-item').forEach(item => {
-                item.classList.remove('active');
-            });
-            if (targetId === 'global') {
-                globalChatItem.classList.add('active');
-            } else {
-                const userItem = document.querySelector(`.user-item[data-user-id="${targetId}"]`);
-                if (userItem) {
-                    userItem.classList.add('active');
-                }
-            }
-        }
-
-        function formatTimestamp(isoString) {
-            const date = new Date(isoString);
-            const hours = date.getHours().toString().padStart(2, '0');
-            const minutes = date.getMinutes().toString().padStart(2, '0');
-            return `${hours}:${minutes}`;
-        }
-
-        function appendMessage(sender, message, isSystem = false, timestamp = null) {
-            const messageRow = document.createElement('div');
-            messageRow.classList.add('message-row');
-
-            const messageBubble = document.createElement('div');
-            messageBubble.classList.add('message-bubble');
-
-            if (isSystem) {
-                messageRow.classList.add('system-message-row');
-                messageBubble.classList.add('system-message-bubble');
-                messageBubble.textContent = message;
-            } else {
-                const messageContent = document.createElement('span');
-                messageContent.textContent = message;
-                messageBubble.appendChild(messageContent);
-
-                if (timestamp) {
-                    const timestampSpan = document.createElement('span');
-                    timestampSpan.classList.add('message-timestamp');
-                    timestampSpan.textContent = formatTimestamp(timestamp);
-                    messageBubble.appendChild(timestampSpan);
-                }
-
-                if (sender === currentUsername) {
-                    messageRow.classList.add('my-message-row');
-                    messageBubble.classList.add('my-message-bubble');
-                } else {
-                    messageRow.classList.add('other-message-row');
-                    messageBubble.classList.add('other-message-bubble');
-                    const senderSpan = document.createElement('span');
-                    senderSpan.classList.add('message-sender');
-                    senderSpan.textContent = sender;
-                    messageBubble.prepend(senderSpan);
-                }
-            }
-            messageRow.appendChild(messageBubble);
-            chatContainer.appendChild(messageRow);
-
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-        }
-
-        function updateUnreadCountDisplay(userId, count) {
-            const userItem = document.querySelector(`.user-item[data-user-id="${userId}"]`);
-            if (!userItem) return;
-
-            let badge = userItem.querySelector('.unread-badge');
-            if (count > 0) {
-                if (!badge) {
-                    badge = document.createElement('span');
-                    badge.classList.add('unread-badge');
-                    userItem.appendChild(badge);
-                }
-                badge.textContent = count > 99 ? '99+' : count;
-                if (count >= 10) {
-                    badge.classList.add('two-digits');
-                } else {
-                    badge.classList.remove('two-digits');
-                }
-            } else {
-                if (badge) {
-                    badge.remove();
-                }
-            }
-        }
-
-        function updateTotalUnreadBell(count) {
-            if (count > 0) {
-                notificationBellBadge.textContent = count > 99 ? '99+' : count;
-                notificationBellBadge.classList.add('visible');
-                if (count >= 10) {
-                    notificationBellBadge.classList.add('two-digits');
-                } else {
-                    notificationBellBadge.classList.remove('two-digits');
-                }
-            } else {
-                notificationBellBadge.classList.remove('visible', 'two-digits');
-                notificationBellBadge.textContent = '0';
-            }
-        }
-
-        function switchChat(targetUser = null) {
-            currentChatPartner = targetUser;
-            clearChatContainer();
-
-            if (targetUser === null) {
-                chatTitle.textContent = 'Global Chat Room';
-                socket.emit('request-global-history');
-                setActiveUserItem('global');
-                voiceChatButton.style.display = 'none';
-
-            } else {
-                chatTitle.textContent = `Chat with ${targetUser.username}`;
-                socket.emit('request-private-history', targetUser.id);
-                setActiveUserItem(targetUser.id);
-                socket.emit('mark-private-messages-read', targetUser.id);
-                voiceChatButton.style.display = '';
-
-            }
-            if (window.innerWidth <= 768) {
-                sidebar.classList.remove('open');
-                sidebarOverlay.classList.remove('visible');
-            }
-        }
-
-        globalChatItem.addEventListener('click', () => {
-            switchChat(null);
-        });
-
-        function renderOnlineUsers(users) {
-            let activeUserId = currentChatPartner ? currentChatPartner.id : 'global';
-
-            const otherUsers = users.filter(user => user.id !== currentUserId);
-
-            const itemsToRemove = Array.from(userList.children).filter(child => child.id !== 'global-chat-item');
-            itemsToRemove.forEach(item => userList.removeChild(item));
-
-            otherUsers.sort((a, b) => a.username.localeCompare(b.username));
-
-            otherUsers.forEach(user => {
-                const li = document.createElement('li');
-                li.classList.add('user-item');
-                li.dataset.userId = user.id;
-                li.dataset.username = user.username;
-
-                li.addEventListener('click', () => {
-                    switchChat(user);
-                });
-
-                const statusDot = document.createElement('span');
-                statusDot.classList.add('user-item-status');
-                li.appendChild(statusDot);
-
-                const userNameSpan = document.createElement('span');
-                userNameSpan.classList.add('user-item-name');
-                userNameSpan.textContent = user.username;
-                li.appendChild(userNameSpan);
-
-                userList.appendChild(li);
-
-                const currentUnread = clientUnreadCountsDisplay.get(user.id) || 0;
-                updateUnreadCountDisplay(user.id, currentUnread);
-            });
-
-            setActiveUserItem(activeUserId);
-        }
-
-        // --- Initial Session and Settings Load ---
-        fetch('/session')
-            .then(res => res.json())
-            .then(data => {
-                if (data.loggedIn && data.username && data.userId) {
-                    currentUsername = data.username;
-                    currentUserId = data.userId;
-                    voiceChatButton.style.display = 'none';
-
-
-                    // Load user settings from the server
-                    loadUserSettings();
-                    switchChat(null);
-                } else {
-                    window.location.href = '/login.html';
-                }
-            })
-            .catch(error => {
-                console.error('Error checking session:', error);
-                window.location.href = '/login.html';
-            });
-
-        messageForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const msg = messageInput.value.trim();
-            if (!msg || !currentUsername || !currentUserId) return;
-
-            const messagePayload = {
-                message: msg
-            };
-
-            if (currentChatPartner === null) {
-                socket.emit('chat-message', messagePayload);
-            } else {
-                socket.emit('private-message', {
-                    recipientId: currentChatPartner.id,
-                    message: messagePayload.message
-                });
-            }
-            messageInput.value = '';
-        });
-
-        // Corrected client-side event handlers
+// --- CORRECTED CLIENT-SIDE EVENT HANDLERS ---
+// The following handlers have been updated to ensure the correct number and
+// type of arguments are passed to the appendMessage function.
 
 // Event handler for loading global chat history
 socket.on('chat-history', (history) => {
-    // Only update global chat if no private chat is active
-    if (currentChatPartner === null) {
-        clearChatContainer();
-        history.forEach(msg => {
-            // Corrected: use msg.message instead of msg.message_content
-            appendMessage(msg.username, msg.message, false, msg.timestamp);
-        });
-    }
+    // Only update global chat if no private chat is active
+    if (currentChatPartner === null) {
+        clearChatContainer();
+        history.forEach(msg => {
+            // Correctly pass false for isSystem
+            appendMessage(msg.username, msg.message, false, msg.timestamp);
+        });
+    }
 });
 
 // Event handler for a new global chat message
-socket.on('chat-message', ({ user, message_content, timestamp }) => {
-    // Only display global chat messages if no private chat is active
-    if (currentChatPartner === null) {
-        // Corrected: The de-structured 'message' property is already correct
-        appendMessage(user, message_content, false, timestamp);
-    }
+socket.on('chat-message', ({ user, message, timestamp }) => {
+    // Only display global chat messages if no private chat is active
+    if (currentChatPartner === null) {
+        // Correctly pass false for isSystem
+        appendMessage(user, message, false, timestamp);
+    }
 });
 
 // Event handler for loading private chat history
 socket.on('private-history-loaded', (history) => {
-    // Only update private chat if a chat partner is selected
-    if (currentChatPartner !== null) {
-        clearChatContainer();
-        history.forEach(msg => {
-            // Corrected: use msg.message_content as sent from the server's private history query
-            // The server's `getPrivateMessageHistory` function does not alias this.
-            appendMessage(msg.username, msg.message_content, msg.timestamp);
-        });
-    }
+    // Only update private chat if a chat partner is selected
+    if (currentChatPartner !== null) {
+        clearChatContainer();
+        history.forEach(msg => {
+            // Fix: Explicitly pass 'false' for the `isSystem` parameter.
+            // The `sender` parameter is checked inside appendMessage to determine if it's "my" message.
+            appendMessage(msg.sender_username, msg.message_content, false, msg.timestamp);
+        });
+    }
 });
 
 
-        socket.on('private-message-received', (messageData) => {
-            const { senderId, senderUsername, receiverId, message_content, timestamp } = messageData;
+socket.on('private-message-received', (messageData) => {
+    const { senderId, senderUsername, receiverId, message_content, timestamp } = messageData;
 
-            const isRelevantToCurrentChat = (currentChatPartner &&
-                                            ((String(currentChatPartner.id) === String(senderId) && String(currentUserId) === String(receiverId)) ||
-                                             (String(currentChatPartner.id) === String(receiverId) && String(currentUserId) === String(senderId))));
+    const isRelevantToCurrentChat = (currentChatPartner &&
+                                       ((String(currentChatPartner.id) === String(senderId) && String(currentUserId) === String(receiverId)) ||
+                                       (String(currentChatPartner.id) === String(receiverId) && String(currentUserId) === String(senderId))));
 
-            if (isRelevantToCurrentChat) {
-                appendMessage(senderUsername, message_content, false, timestamp);
-                if (String(senderId) !== String(currentUserId)) {
-                    socket.emit('mark-private-messages-read', senderId);
-                }
-            } else if (String(senderId) !== String(currentUserId)) {
-                console.log(`New private message from ${senderUsername} while in another chat.`);
-            }
-        });
-
-        socket.on('initial-unread-counts', (unreadData) => {
-            console.log('Received individual unread counts:', unreadData);
-            clientUnreadCountsDisplay.clear();
-            for (const senderId in unreadData) {
-                if (Object.prototype.hasOwnProperty.call(unreadData, senderId)) {
-                    clientUnreadCountsDisplay.set(senderId, unreadData[senderId]);
-                }
-            }
-            document.querySelectorAll('.user-item[data-user-id]').forEach(item => {
-                const userId = item.dataset.userId;
-                const count = clientUnreadCountsDisplay.get(userId) || 0;
-                updateUnreadCountDisplay(userId, count);
-            });
-        });
-
-        socket.on('total-unread-count', (totalCount) => {
-            console.log('Received total unread count:', totalCount);
-            updateTotalUnreadBell(totalCount);
-        });
-
-        socket.on('online-users-list', (users) => {
-            renderOnlineUsers(users);
-            clientUnreadCountsDisplay.forEach((count, userId) => {
-                updateUnreadCountDisplay(userId, count);
-            });
-        });
-
-        socket.on('system-message', (message) => {
-            appendMessage(null, message, true);
-        });
-
-        socket.on('user-joined', (username) => {
-            if (currentChatPartner === null) {
-                appendMessage(null, `${username} joined the chat`, true);
-            }
-        });
-
-        socket.on('user-left', (username) => {
-            if (currentChatPartner === null) {
-                appendMessage(null, `${username} left the chat`, true);
-            }
-        });
-
-        sidebarToggle.addEventListener('click', () => {
-            sidebar.classList.toggle('open');
-            sidebarOverlay.classList.toggle('visible');
-        });
-
-        sidebarOverlay.addEventListener('click', () => {
-            sidebar.classList.remove('open');
-            sidebarOverlay.classList.remove('visible');
-        });
-
-        function logout() {
-            fetch('/logout')
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        window.location.href = '/login.html';
-                    } else {
-                        alert('Logout failed: ' + (data.message || 'Unknown error'));
-                    }
-                })
-                .catch(error => {
-                    console.error('Error during logout:', error);
-                    alert('An error occurred during logout. Please try again.');
-                });
-        }
-
-        // Emoji Picker Logic
-        function renderEmojiPicker() {
-            emojiPickerContainer.innerHTML = '';
-            commonEmojis.forEach(emoji => {
-                const span = document.createElement('span');
-                span.classList.add('emoji-item');
-                span.textContent = emoji;
-                span.addEventListener('click', () => {
-                    messageInput.value += emoji;
-                    messageInput.focus();
-                    emojiPickerContainer.classList.remove('open');
-                });
-                emojiPickerContainer.appendChild(span);
-            });
-        }
-
-        emojiButton.addEventListener('click', () => {
-            emojiPickerContainer.classList.toggle('open');
-        });
-
-        document.addEventListener('click', (event) => {
-            if (!emojiPickerContainer.contains(event.target) && !emojiButton.contains(event.target)) {
-                emojiPickerContainer.classList.remove('open');
-            }
-        });
-        renderEmojiPicker();
-
-        // Voice Chat Button Logic (Placeholder)
-        voiceChatButton.addEventListener('click', () => {
-            if (currentChatPartner) {
-                alert(`Starting voice chat with ${currentChatPartner.username}... (Feature not fully implemented)`);
-                console.log(`User ${currentUserId} wants to start voice chat with ${currentChatPartner.id}`);
-            } else {
-                alert("Please select a private chat to start a voice call.");
-            }
-        });
+    if (isRelevantToCurrentChat) {
+        // Fix: Explicitly pass 'false' for the `isSystem` parameter.
+        appendMessage(senderUsername, message_content, false, timestamp);
+        if (String(senderId) !== String(currentUserId)) {
+            socket.emit('mark-private-messages-read', senderId);
+        }
+    } else if (String(senderId) !== String(currentUserId)) {
+        console.log(`New private message from ${senderUsername} while in another chat.`);
+    }
+});
 
 
+socket.on('initial-unread-counts', (unreadData) => {
+    console.log('Received individual unread counts:', unreadData);
+    clientUnreadCountsDisplay.clear();
+    for (const senderId in unreadData) {
+        if (Object.prototype.hasOwnProperty.call(unreadData, senderId)) {
+            clientUnreadCountsDisplay.set(senderId, unreadData[senderId]);
+        }
+    }
+    document.querySelectorAll('.user-item[data-user-id]').forEach(item => {
+        const userId = item.dataset.userId;
+        const count = clientUnreadCountsDisplay.get(userId) || 0;
+        updateUnreadCountDisplay(userId, count);
+    });
+});
 
-        // Add Item Button Logic (Placeholder)
-        addItemButton.addEventListener('click', () => {
-            alert("Add new item functionality here! (e.g., add new contact, create group)");
-            console.log("Add item button clicked.");
-        });
+socket.on('total-unread-count', (totalCount) => {
+    console.log('Received total unread count:', totalCount);
+    updateTotalUnreadBell(totalCount);
+});
 
-        // --- NEW: Settings Modal Logic (Updated for Backend Interaction) ---
+socket.on('online-users-list', (users) => {
+    renderOnlineUsers(users);
+    clientUnreadCountsDisplay.forEach((count, userId) => {
+        updateUnreadCountDisplay(userId, count);
+    });
+});
 
-        settingsButton.addEventListener('click', () => {
-            settingsModal.classList.add('open');
-            // Sync current theme/background selection in the modal
-            // This will be done by loadUserSettings which is called on session check
-            // and should already have the latest from the server.
-            // However, we need to ensure the dropdown and visual boxes reflect the current state
-            const currentTheme = document.body.classList.contains('light-theme') ? 'light' : 'dark'; // Assuming only light/dark
-            themeSelect.value = currentTheme;
-            updateThemeOptionBoxes(currentTheme);
+socket.on('system-message', (message) => {
+    appendMessage(null, message, true);
+});
 
-            // Update background button text based on current background
-            const currentBackground = chatContainer.style.backgroundImage;
-            if (currentBackground && currentBackground !== 'none') {
-                setBackgroundBtn.textContent = 'Change Background';
-                clearBackgroundBtn.style.display = 'inline-block';
-            } else {
-                setBackgroundBtn.textContent = 'Set Background';
-                clearBackgroundBtn.style.display = 'none';
-            }
-        });
+socket.on('user-joined', (username) => {
+    if (currentChatPartner === null) {
+        appendMessage(null, `${username} joined the chat`, true);
+    }
+});
 
-        settingsCloseBtn.addEventListener('click', () => {
-            settingsModal.classList.remove('open');
-        });
+socket.on('user-left', (username) => {
+    if (currentChatPartner === null) {
+        appendMessage(null, `${username} left the chat`, true);
+    }
+});
 
-        settingsModal.addEventListener('click', (event) => {
-            if (event.target === settingsModal) {
-                settingsModal.classList.remove('open');
-            }
-        });
+sidebarToggle.addEventListener('click', () => {
+    sidebar.classList.toggle('open');
+    sidebarOverlay.classList.toggle('visible');
+});
 
-        // Theme Switching
-        async function applyTheme(themeName, saveToServer = true) {
-            const body = document.body;
-            const chatContainer = document.getElementById('chat-container');
-            const messageForm = document.getElementById('message-form');
-            const sidebar = document.getElementById('sidebar');
-            const header = document.querySelector('header');
+sidebarOverlay.addEventListener('click', () => {
+    sidebar.classList.remove('open');
+    sidebarOverlay.classList.remove('visible');
+});
 
-            // Reset all theme-specific classes first
-            body.classList.remove('light-theme');
-            // Remove other theme classes if you add them (e.g., 'custom-theme')
-
-            if (themeName === 'light') {
-                body.classList.add('light-theme');
-            } else if (themeName === 'dark') {
-                // Dark is default, no specific class needed on body
-                // But ensure specific elements revert to dark styles if light class was removed
-            }
-            // For 'custom' theme, you'd add a 'custom-theme' class and its CSS rules
-
-            // Apply chat container background logic based on theme (if themes also define default backgrounds)
-            // For now, background is separate, so only apply theme-specific changes to other elements.
-
-            // Re-apply background image based on user setting after theme.
-            // This ensures the background image always takes precedence over theme's default background if any.
-            const savedBackgroundUrl = localStorage.getItem('chatAppBackgroundUrl');
-            if (savedBackgroundUrl) {
-                chatContainer.style.backgroundImage = `url('${savedBackgroundUrl}')`;
-            } else {
-                chatContainer.style.backgroundImage = 'none';
-            }
-
-            if (saveToServer) {
-                try {
-                    const response = await fetch('/api/settings/theme', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ theme: themeName })
-                    });
-                    const data = await response.json();
-                    if (data.success) {
-                        console.log('Theme saved to server:', themeName);
-                    } else {
-                        console.error('Failed to save theme to server:', data.message);
-                        alert('Failed to save theme: ' + data.message);
-                    }
-                } catch (error) {
-                    console.error('Network error saving theme:', error);
-                    alert('Network error saving theme.');
-                }
-            }
-            updateThemeOptionBoxes(themeName);
-        }
-
-        function updateThemeOptionBoxes(activeTheme) {
-            themeOptionBoxes.forEach(box => {
-                box.classList.remove('active');
-                if (box.dataset.theme === activeTheme) {
-                    box.classList.add('active');
-                }
-            });
-        }
-
-        themeSelect.addEventListener('change', (event) => {
-            applyTheme(event.target.value);
-        });
-
-        themeOptionBoxes.forEach(box => {
-            box.addEventListener('click', () => {
-                const theme = box.dataset.theme;
-                applyTheme(theme);
-                themeSelect.value = theme; // Also update dropdown
-            });
-        });
-
-        // Chat Background Image Upload
-        setBackgroundBtn.addEventListener('click', async () => {
-            const file = backgroundImageUpload.files[0];
-            if (file) {
-                const formData = new FormData();
-                formData.append('background_image', file);
-
-                try {
-                    const response = await fetch('/api/settings/background', {
-                        method: 'POST',
-                        body: formData // Multer expects FormData
-                    });
-                    const data = await response.json();
-                    if (data.success) {
-                        chatContainer.style.backgroundImage = `url('${data.imageUrl}')`;
-                        localStorage.setItem('chatAppBackgroundUrl', data.imageUrl); // Save URL, not data URL
-                        setBackgroundBtn.textContent = 'Change Background';
-                        clearBackgroundBtn.style.display = 'inline-block';
-                        alert('Chat background updated successfully!');
-                        backgroundImageUpload.value = ''; // Clear file input
-                    } else {
-                        alert('Failed to set background: ' + (data.message || 'Unknown error'));
-                        console.error('Background upload failed:', data.message);
-                    }
-                } catch (error) {
-                    console.error('Network error uploading background:', error);
-                    alert('Network error uploading background. Please try again.');
-                }
-            } else {
-                alert('Please select an image file first.');
-            }
-        });
-
-        clearBackgroundBtn.addEventListener('click', async () => {
-            try {
-                const response = await fetch('/api/settings/clear-background', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                const data = await response.json();
-                if (data.success) {
-                    chatContainer.style.backgroundImage = 'none';
-                    localStorage.removeItem('chatAppBackgroundUrl');
-                    setBackgroundBtn.textContent = 'Set Background';
-                    clearBackgroundBtn.style.display = 'none';
-                    backgroundImageUpload.value = '';
-                    alert('Chat background cleared.');
-                } else {
-                    alert('Failed to clear background: ' + (data.message || 'Unknown error'));
-                    console.error('Clear background failed:', data.message);
-                }
-            } catch (error) {
-                console.error('Network error clearing background:', error);
-                alert('Network error clearing background. Please try again.');
-            }
-        });
-
-     // public/chat.html (or public/js/chat.js)
-
-async function loadUserSettings() {
-    try {
-        // Change the URL to fetch from your /session endpoint
-        const response = await fetch('/session');
-        const data = await response.json();
-
-        // The /session endpoint returns loggedIn, username, userId,
-        // theme_preference, and chat_background_image_url directly on the data object.
-        if (data.loggedIn) {
-            const { theme_preference, chat_background_image_url } = data; // Destructure directly from data
-
-            // --- Apply Theme Preference ---
-            const themeLink = document.getElementById('theme-link');
-            if (themeLink && theme_preference) {
-                // Ensure your theme preference matches your CSS file names
-                // e.g., 'dark' for css/theme-dark.css, 'light' for css/theme-light.css
-                themeLink.href = `/css/theme-${theme_preference}.css`;
-                console.log(`Applied theme: ${theme_preference}`);
-            } else if (themeLink) {
-                // If no specific theme preference is set, reset to default (e.g., style.css or theme-light.css)
-                themeLink.href = '/css/style.css'; // Or your default light theme CSS path
-                console.log('Applied default theme (no preference set).');
-            }
-
-
-            // --- Apply Chat Background Image ---
-            const chatBox = document.getElementById('chat-box'); // Ensure you have an element with id="chat-box"
-            if (chatBox) {
-                if (chat_background_image_url) {
-                    // Prepend server origin if not already there (for full URL, useful if paths are relative)
-                    // The line below should handle both relative paths (e.g., '/images/bg.jpg')
-                    // and full URLs (e.g., 'https://example.com/images/bg.jpg')
-                    const imageUrl = chat_background_image_url.startsWith('http') ? chat_background_image_url : window.location.origin + chat_background_image_url;
-                    chatBox.style.backgroundImage = `url('${imageUrl}')`;
-                    chatBox.style.backgroundSize = 'cover';
-                    chatBox.style.backgroundPosition = 'center';
-                    chatBox.style.backgroundAttachment = 'fixed'; // Optional: for parallax-like effect
-                    console.log(`Applied background image: ${chat_background_image_url}`);
-                } else {
-                    chatBox.style.backgroundImage = ''; // Clear if no background URL
-                    console.log('Cleared chat background image.');
-                }
-            }
-
-            // You might want to store these preferences in client-side storage
-            // (e.g., localStorage) so they apply instantly on subsequent visits
-            // before the server response, but the server is the source of truth.
-
-        } else {
-            // If the /session endpoint indicates not logged in, it means the server
-            // didn't recognize the session cookie. Your server already redirects
-            // /chat.html to /login.html in this case, so explicit client-side
-            // redirection here might be redundant but safe as a fallback.
-            console.log('User not logged in according to /session endpoint. Server should redirect.');
-            // If you want a client-side fallback redirect, uncomment:
-            // window.location.href = '/login.html';
-        }
-
-    } catch (error) {
-        console.error('Error fetching user settings or applying preferences:', error);
-        // Important: Do NOT redirect to login here. This catch block handles
-        // network errors or parsing errors, not session invalidation.
-        // The /session check at the start of /chat.html route in server.js
-        // is responsible for redirecting unauthenticated users.
-    }
+function logout() {
+    fetch('/logout')
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                window.location.href = '/login.html';
+            } else {
+                alert('Logout failed: ' + (data.message || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error during logout:', error);
+            alert('An error occurred during logout. Please try again.');
+        });
 }
 
-        // Add Group Button (Placeholder)
-        addGroupBtn.addEventListener('click', () => {
-            alert("Group creation functionality will go here! (Requires backend implementation for groups)");
-            console.log("Add New Group button clicked.");
-            // In a real application, you might:
-            // - Open a new modal for group details (name, members)
-            // - Redirect to a group creation page
-            // - Emit a socket event to the server to create a group
-        });
-       // Register Service Worker
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js')
-                    .then(registration => {
-                        console.log('Service Worker registered successfully:', registration);
-                    })
-                    .catch(error => {
-                        console.error('Service Worker registration failed:', error);
-                    });
-            });
-        }
+// Emoji Picker Logic
+function renderEmojiPicker() {
+    emojiPickerContainer.innerHTML = '';
+    commonEmojis.forEach(emoji => {
+        const span = document.createElement('span');
+        span.classList.add('emoji-item');
+        span.textContent = emoji;
+        span.addEventListener('click', () => {
+            messageInput.value += emoji;
+            messageInput.focus();
+            emojiPickerContainer.classList.remove('open');
+        });
+        emojiPickerContainer.appendChild(span);
+    });
+}
+
+emojiButton.addEventListener('click', () => {
+    emojiPickerContainer.classList.toggle('open');
+});
+
+document.addEventListener('click', (event) => {
+    if (!emojiPickerContainer.contains(event.target) && !emojiButton.contains(event.target)) {
+        emojiPickerContainer.classList.remove('open');
+    }
+});
+renderEmojiPicker();
+
+// Voice Chat Button Logic (Placeholder)
+voiceChatButton.addEventListener('click', () => {
+    if (currentChatPartner) {
+        alert(`Starting voice chat with ${currentChatPartner.username}... (Feature not fully implemented)`);
+        console.log(`User ${currentUserId} wants to start voice chat with ${currentChatPartner.id}`);
+    } else {
+        alert("Please select a private chat to start a voice call.");
+    }
+});
+
+// Add Item Button Logic (Placeholder)
+addItemButton.addEventListener('click', () => {
+    alert("Add new item functionality here! (e.g., add new contact, create group)");
+    console.log("Add item button clicked.");
+});
+
+// --- NEW: Settings Modal Logic (Updated for Backend Interaction) ---
+settingsButton.addEventListener('click', () => {
+    settingsModal.classList.add('open');
+    const currentTheme = document.body.classList.contains('light-theme') ? 'light' : 'dark';
+    themeSelect.value = currentTheme;
+    updateThemeOptionBoxes(currentTheme);
+
+    const currentBackground = chatContainer.style.backgroundImage;
+    if (currentBackground && currentBackground !== 'none') {
+        setBackgroundBtn.textContent = 'Change Background';
+        clearBackgroundBtn.style.display = 'inline-block';
+    } else {
+        setBackgroundBtn.textContent = 'Set Background';
+        clearBackgroundBtn.style.display = 'none';
+    }
+});
+
+settingsCloseBtn.addEventListener('click', () => {
+    settingsModal.classList.remove('open');
+});
+
+settingsModal.addEventListener('click', (event) => {
+    if (event.target === settingsModal) {
+        settingsModal.classList.remove('open');
+    }
+});
+
+// Theme Switching
+async function applyTheme(themeName, saveToServer = true) {
+    const body = document.body;
+    const chatContainer = document.getElementById('chat-container');
+    const messageForm = document.getElementById('message-form');
+    const sidebar = document.getElementById('sidebar');
+    const header = document.querySelector('header');
+
+    body.classList.remove('light-theme');
+    
+    if (themeName === 'light') {
+        body.classList.add('light-theme');
+    }
+    
+    const savedBackgroundUrl = localStorage.getItem('chatAppBackgroundUrl');
+    if (savedBackgroundUrl) {
+        chatContainer.style.backgroundImage = `url('${savedBackgroundUrl}')`;
+    } else {
+        chatContainer.style.backgroundImage = 'none';
+    }
+
+    if (saveToServer) {
+        try {
+            const response = await fetch('/api/settings/theme', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ theme: themeName })
+            });
+            const data = await response.json();
+            if (data.success) {
+                console.log('Theme saved to server:', themeName);
+            } else {
+                console.error('Failed to save theme to server:', data.message);
+                alert('Failed to save theme: ' + data.message);
+            }
+        } catch (error) {
+            console.error('Network error saving theme:', error);
+            alert('Network error saving theme.');
+        }
+    }
+    updateThemeOptionBoxes(themeName);
+}
+
+function updateThemeOptionBoxes(activeTheme) {
+    themeOptionBoxes.forEach(box => {
+        box.classList.remove('active');
+        if (box.dataset.theme === activeTheme) {
+            box.classList.add('active');
+        }
+    });
+}
+
+themeSelect.addEventListener('change', (event) => {
+    applyTheme(event.target.value);
+});
+
+themeOptionBoxes.forEach(box => {
+    box.addEventListener('click', () => {
+        const theme = box.dataset.theme;
+        applyTheme(theme);
+        themeSelect.value = theme;
+    });
+});
+
+// Chat Background Image Upload
+setBackgroundBtn.addEventListener('click', async () => {
+    const file = backgroundImageUpload.files[0];
+    if (file) {
+        const formData = new FormData();
+        formData.append('background_image', file);
+
+        try {
+            const response = await fetch('/api/settings/background', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+            if (data.success) {
+                chatContainer.style.backgroundImage = `url('${data.imageUrl}')`;
+                localStorage.setItem('chatAppBackgroundUrl', data.imageUrl);
+                setBackgroundBtn.textContent = 'Change Background';
+                clearBackgroundBtn.style.display = 'inline-block';
+                alert('Chat background updated successfully!');
+                backgroundImageUpload.value = '';
+            } else {
+                alert('Failed to set background: ' + (data.message || 'Unknown error'));
+                console.error('Background upload failed:', data.message);
+            }
+        } catch (error) {
+            console.error('Network error uploading background:', error);
+            alert('Network error uploading background. Please try again.');
+        }
+    } else {
+        alert('Please select an image file first.');
+    }
+});
+
+clearBackgroundBtn.addEventListener('click', async () => {
+    try {
+        const response = await fetch('/api/settings/clear-background', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await response.json();
+        if (data.success) {
+            chatContainer.style.backgroundImage = 'none';
+            localStorage.removeItem('chatAppBackgroundUrl');
+            setBackgroundBtn.textContent = 'Set Background';
+            clearBackgroundBtn.style.display = 'none';
+            backgroundImageUpload.value = '';
+            alert('Chat background cleared.');
+        } else {
+            alert('Failed to clear background: ' + (data.message || 'Unknown error'));
+            console.error('Clear background failed:', data.message);
+        }
+    } catch (error) {
+        console.error('Network error clearing background:', error);
+        alert('Network error clearing background. Please try again.');
+    }
+});
+
+async function loadUserSettings() {
+    try {
+        const response = await fetch('/session');
+        const data = await response.json();
+
+        if (data.loggedIn) {
+            const { theme_preference, chat_background_image_url } = data;
+
+            const themeLink = document.getElementById('theme-link');
+            if (themeLink && theme_preference) {
+                themeLink.href = `/css/theme-${theme_preference}.css`;
+                console.log(`Applied theme: ${theme_preference}`);
+            } else if (themeLink) {
+                themeLink.href = '/css/style.css';
+                console.log('Applied default theme (no preference set).');
+            }
+
+            const chatBox = document.getElementById('chat-box');
+            if (chatBox) {
+                if (chat_background_image_url) {
+                    const imageUrl = chat_background_image_url.startsWith('http') ? chat_background_image_url : window.location.origin + chat_background_image_url;
+                    chatBox.style.backgroundImage = `url('${imageUrl}')`;
+                    chatBox.style.backgroundSize = 'cover';
+                    chatBox.style.backgroundPosition = 'center';
+                    chatBox.style.backgroundAttachment = 'fixed';
+                    console.log(`Applied background image: ${chat_background_image_url}`);
+                } else {
+                    chatBox.style.backgroundImage = '';
+                    console.log('Cleared chat background image.');
+                }
+            }
+        } else {
+            console.log('User not logged in according to /session endpoint. Server should redirect.');
+        }
+    } catch (error) {
+        console.error('Error fetching user settings or applying preferences:', error);
+    }
+}
+
+// Add Group Button (Placeholder)
+addGroupBtn.addEventListener('click', () => {
+    alert("Group creation functionality will go here! (Requires backend implementation for groups)");
+    console.log("Add New Group button clicked.");
+});
+
+// Register Service Worker
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+            .then(registration => {
+                console.log('Service Worker registered successfully:', registration);
+            })
+            .catch(error => {
+                console.error('Service Worker registration failed:', error);
+            });
+    });
+}
+
   </script>
 
 </body>
