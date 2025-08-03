@@ -1165,7 +1165,9 @@ function appendMessage(sender, message, isSystem = false, timestamp = null) {
             senderSpan.textContent = sender;
             messageBubble.prepend(senderSpan);
         }
+        
         const messageContent = document.createElement('span');
+        messageContent.classList.add('message_content');
         messageContent.textContent = message;
         messageBubble.appendChild(messageContent);
 
