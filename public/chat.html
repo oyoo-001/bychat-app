@@ -1157,58 +1157,59 @@ function formatTimestamp(isoString) {
     return `${hours}:${minutes}`;
 }
 
+// A simple helper function to format the timestamp
+function formatTimestamp(timestamp) {
+    const date = new Date(timestamp);
+    const options = { hour: '2-digit', minute: '2-digit', hour12: true };
+    return date.toLocaleTimeString('en-US', options);
+}
+
 // Corrected appendMessage function
-function appendMessage(username, message_content, isMyMessage, timestamp) {
+function appendMessage(username, message_content, isMyMessage, timestamp, isGlobalChat) {
     const chatContainer = document.getElementById('chat-container');
 
-    // Create the main container for the message row
     const messageRow = document.createElement('div');
     messageRow.classList.add('message-row');
 
-    // Create the message bubble
     const messageBubble = document.createElement('div');
     messageBubble.classList.add('message-bubble');
 
-    // Create a div for the message content
     const messageContent = document.createElement('div');
     messageContent.classList.add('message-content');
     messageContent.textContent = message_content;
 
-    // Create a span for the timestamp
     const timestampSpan = document.createElement('span');
     timestampSpan.classList.add('message-timestamp');
     timestampSpan.textContent = formatTimestamp(timestamp);
 
-    // --- Core Logic for sent vs. received messages ---
+    // Core Logic for sent vs. received messages
     if (isMyMessage) {
-        // Apply classes for sent messages
+        // My message (sent)
         messageRow.classList.add('my-message-row');
         messageBubble.classList.add('my-message-bubble');
-
-        // Append content and timestamp to the bubble
+        
+        // My messages in private chat should not have a username.
+        // My messages in global chat should also not have a username.
         messageBubble.appendChild(messageContent);
         messageBubble.appendChild(timestampSpan);
     } else {
-        // Apply classes for received messages
+        // Other person's message (received)
         messageRow.classList.add('other-message-row');
         messageBubble.classList.add('other-message-bubble');
 
-        // Create and add the sender's username
+        // Always show the sender's username for received messages
         const senderNameSpan = document.createElement('span');
         senderNameSpan.classList.add('message-sender');
         senderNameSpan.textContent = username;
 
-        // Append sender name, content, and timestamp to the bubble
         messageBubble.appendChild(senderNameSpan);
         messageBubble.appendChild(messageContent);
         messageBubble.appendChild(timestampSpan);
     }
 
-    // Append the bubble to the row, and the row to the chat container
     messageRow.appendChild(messageBubble);
     chatContainer.appendChild(messageRow);
 
-    // Auto-scroll to the latest message
     chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
@@ -1373,38 +1374,46 @@ socket.on('chat-history', (history) => {
     }
 });
 
+// A global variable to store the current user's username.
+// Make sure this is set when the user logs in.
+
+
 // Event handler for a new global chat message
-socket.on('chat-message', ({ user, message_content, timestamp }) => {
+socket.on('chat-message', (messageData) => {
     // Only display global chat messages if no private chat is active
     if (currentChatPartner === null) {
-        // FIX: Destructure `message_content` from the payload, not `message`
-        appendMessage(user, message_content, false, timestamp);
+        const { user, message_content, timestamp } = messageData;
+        
+        // FIX: Compare the message user with the current user
+        const isMyMessage = (user === currentUsername);
+
+        appendMessage(user, message_content, isMyMessage, timestamp, true);
     }
 });
 
-// Event handler for loading private chat history
 // Event handler for loading private chat history
 socket.on('private-history-loaded', (history) => {
     // Only update private chat if a chat partner is selected
     if (currentChatPartner !== null) {
         clearChatContainer();
         history.forEach(msg => {
-            // FIX: Pass the msg.is_my_message flag to appendMessage
-            appendMessage(msg.sender_username, msg.message_content, msg.is_my_message, msg.timestamp);
+            // FIX: Pass the msg.is_my_message flag from the server
+            appendMessage(msg.sender_username, msg.message_content, msg.is_my_message, msg.timestamp, false);
         });
     }
 });
 
+// Event handler for a new private message being received or sent
 socket.on('private-message-received', (messageData) => {
-    const { senderId, senderUsername, receiverId, message_content, timestamp } = messageData;
+    const { senderId, senderUsername, receiverId, message_content, timestamp, is_my_message } = messageData;
 
     const isRelevantToCurrentChat = (currentChatPartner &&
                                       ((String(currentChatPartner.id) === String(senderId) && String(currentUserId) === String(receiverId)) ||
                                        (String(currentChatPartner.id) === String(receiverId) && String(currentUserId) === String(senderId))));
 
     if (isRelevantToCurrentChat) {
-        // This one was also already correct!
-        appendMessage(senderUsername, message_content, false, timestamp);
+        // FIX: Pass the is_my_message flag from the server
+        appendMessage(senderUsername, message_content, is_my_message, timestamp, false);
         if (String(senderId) !== String(currentUserId)) {
             socket.emit('mark-private-messages-read', senderId);
         }
