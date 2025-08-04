@@ -1157,50 +1157,58 @@ function formatTimestamp(isoString) {
     return `${hours}:${minutes}`;
 }
 
-function appendMessage(sender, message, isSystem = false, timestamp = null) {
+// Corrected appendMessage function
+function appendMessage(username, message_content, isMyMessage, timestamp) {
+    const chatContainer = document.getElementById('chat-container');
+
+    // Create the main container for the message row
     const messageRow = document.createElement('div');
     messageRow.classList.add('message-row');
 
+    // Create the message bubble
     const messageBubble = document.createElement('div');
     messageBubble.classList.add('message-bubble');
 
-    if (isSystem) {
-        messageRow.classList.add('system-message-row');
-        messageBubble.classList.add('system-message-bubble');
-        messageBubble.textContent = message;
+    // Create a div for the message content
+    const messageContent = document.createElement('div');
+    messageContent.classList.add('message-content');
+    messageContent.textContent = message_content;
+
+    // Create a span for the timestamp
+    const timestampSpan = document.createElement('span');
+    timestampSpan.classList.add('message-timestamp');
+    timestampSpan.textContent = formatTimestamp(timestamp);
+
+    // --- Core Logic for sent vs. received messages ---
+    if (isMyMessage) {
+        // Apply classes for sent messages
+        messageRow.classList.add('my-message-row');
+        messageBubble.classList.add('my-message-bubble');
+
+        // Append content and timestamp to the bubble
+        messageBubble.appendChild(messageContent);
+        messageBubble.appendChild(timestampSpan);
     } else {
-        messageBubble.innerHTML = ''; // Clear the message bubble before appending the new message content
-        if (sender === currentUsername) {
-            messageRow.classList.add('my-message-row');
-            messageBubble.classList.add('my-message-bubble');
-        } else {
-            messageRow.classList.add('other-message-row');
-            messageBubble.classList.add('other-message-bubble');
-            const senderSpan = document.createElement('span');
-            senderSpan.classList.add('message-sender');
-            senderSpan.textContent = sender;
-            messageBubble.prepend(senderSpan);
-        }
+        // Apply classes for received messages
+        messageRow.classList.add('other-message-row');
+        messageBubble.classList.add('other-message-bubble');
 
-        const messageContent = document.createElement('span');
-        messageContent.classList.add('message-content'); // <-- UPDATED TO 'message-content'
+        // Create and add the sender's username
+        const senderNameSpan = document.createElement('span');
+        senderNameSpan.classList.add('message-sender');
+        senderNameSpan.textContent = username;
 
-        if (message) {
-            messageContent.textContent = message;
-            messageBubble.appendChild(messageContent);
-        }
-
-        if (timestamp) {
-            const timestampSpan = document.createElement('span');
-            timestampSpan.classList.add('message-timestamp');
-            timestampSpan.textContent = formatTimestamp(timestamp);
-            messageBubble.appendChild(timestampSpan);
-        }
+        // Append sender name, content, and timestamp to the bubble
+        messageBubble.appendChild(senderNameSpan);
+        messageBubble.appendChild(messageContent);
+        messageBubble.appendChild(timestampSpan);
     }
 
+    // Append the bubble to the row, and the row to the chat container
     messageRow.appendChild(messageBubble);
     chatContainer.appendChild(messageRow);
 
+    // Auto-scroll to the latest message
     chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
