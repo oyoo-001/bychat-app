@@ -282,9 +282,8 @@ io.on('connection', async (socket) => {
         }
     });
 
-   // This is a replacement for your existing 'chat-message' socket handler
+  // This is the corrected 'chat-message' socket handler for your server
 socket.on('chat-message', async (messageData) => {
-    // Determine the message content. It could be a string or an object from the client.
     let messageContent = '';
     if (typeof messageData === 'string') {
         messageContent = messageData;
@@ -292,24 +291,19 @@ socket.on('chat-message', async (messageData) => {
         messageContent = messageData.message;
     }
 
-    // Trim the message content and check if it is not empty
     const trimmedMessage = messageContent ? messageContent.trim() : '';
 
-    // Log the message content for debugging purposes
     console.log(`DEBUG: Received global message from ${username} (ID: ${parsedUserId}). Content: "${trimmedMessage}"`);
 
     if (username && parsedUserId && trimmedMessage) {
         try {
-            // Save the message to the database
             await saveMessage(parsedUserId, username, trimmedMessage);
-
-            // Get a server-side timestamp for consistency
             const serverTimestamp = new Date().toISOString();
 
-            // Emit the message to all connected clients
+            // FIX: Change 'message' to 'message_content' to match the client
             io.emit('chat-message', {
                 user: username,
-                message: trimmedMessage,
+                message_content: trimmedMessage,
                 timestamp: serverTimestamp
             });
         } catch (error) {
