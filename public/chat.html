@@ -345,6 +345,22 @@
             margin-left: auto;
             border-bottom-right-radius: 2px;
         }
+        .message-content {
+    /* Set a light color for the text so it's visible */
+    color: #f0f2f5; 
+    
+    /* Set a readable font size */
+    font-size: 14px;
+    
+    /* Add some padding for spacing */
+    padding: 0 10px;
+    
+    /* Ensure long messages wrap correctly */
+    word-wrap: break-word;
+    word-break: break-all;
+    
+    /* Optional: Style for bold text and other formatting if you need it */
+}
         .my-message-bubble::after {
             content: '';
             position: absolute;
@@ -1167,9 +1183,12 @@ function appendMessage(sender, message, isSystem = false, timestamp = null) {
         }
 
         const messageContent = document.createElement('span');
-       
-        messageContent.textContent = message;
-        messageBubble.appendChild(messageContent);
+        messageContent.classList.add('message-content'); // <-- UPDATED TO 'message-content'
+
+        if (message) {
+            messageContent.textContent = message;
+            messageBubble.appendChild(messageContent);
+        }
 
         if (timestamp) {
             const timestampSpan = document.createElement('span');
@@ -1178,11 +1197,13 @@ function appendMessage(sender, message, isSystem = false, timestamp = null) {
             messageBubble.appendChild(timestampSpan);
         }
     }
+
     messageRow.appendChild(messageBubble);
     chatContainer.appendChild(messageRow);
 
     chatContainer.scrollTop = chatContainer.scrollHeight;
 }
+
 function updateUnreadCountDisplay(userId, count) {
     const userItem = document.querySelector(`.user-item[data-user-id="${userId}"]`);
     if (!userItem) return;
