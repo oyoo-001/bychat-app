@@ -1376,12 +1376,18 @@ socket.on('chat-history', (history) => {
     }
 });
 
+// A global variable to store the current user's username.
+// Make sure this is set when the user logs in.
+
+
 // Event handler for a new global chat message
-socket.on('chat-message', ({ user, message_content, timestamp }) => {
-    // Only display global chat messages if no private chat is active
+socket.on('chat-message', (messageData) => {
     if (currentChatPartner === null) {
-        // FIX: Destructure `message_content` from the payload, not `message`
-        appendMessage(user, message_content, false, timestamp);
+        const { user, message_content, timestamp } = messageData;
+        const isMyMessage = (user === currentUsername);
+        
+        // The last parameter, isSystem, must be false for chat messages.
+        appendMessage(user, message_content, isMyMessage, timestamp, false);
     }
 });
 
@@ -1390,7 +1396,7 @@ socket.on('private-history-loaded', (history) => {
     if (currentChatPartner !== null) {
         clearChatContainer();
         history.forEach(msg => {
-            // is_my_message flag is provided by the server for private chat
+            // The last parameter, isSystem, must be false for chat messages.
             appendMessage(msg.sender_username, msg.message_content, msg.is_my_message, msg.timestamp, false);
         });
     }
@@ -1399,19 +1405,16 @@ socket.on('private-history-loaded', (history) => {
 // Event handler for a new private message being received or sent
 socket.on('private-message-received', (messageData) => {
     const { senderId, senderUsername, receiverId, message_content, timestamp, is_my_message } = messageData;
-
     const isRelevantToCurrentChat = (currentChatPartner &&
                                       ((String(currentChatPartner.id) === String(senderId) && String(currentUserId) === String(receiverId)) ||
                                        (String(currentChatPartner.id) === String(receiverId) && String(currentUserId) === String(senderId))));
 
     if (isRelevantToCurrentChat) {
-        // is_my_message flag is provided by the server
+        // The last parameter, isSystem, must be false for chat messages.
         appendMessage(senderUsername, message_content, is_my_message, timestamp, false);
         if (String(senderId) !== String(currentUserId)) {
             socket.emit('mark-private-messages-read', senderId);
         }
-    } else if (String(senderId) !== String(currentUserId)) {
-        console.log(`New private message from ${senderUsername} while in another chat.`);
     }
 });
 socket.on('initial-unread-counts', (unreadData) => {
