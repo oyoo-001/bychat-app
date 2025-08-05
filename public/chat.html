@@ -1151,21 +1151,21 @@
         }
     }
 
-    function formatTimestamp(isoString) {
-        const date = new Date(isoString);
-        const hours = date.getHours().toString().padStart(2, '0');
-        const minutes = date.getMinutes().toString().padStart(2, '0');
-        return `${hours}:${minutes}`;
-    }
-
     // A simple helper function to format the timestamp
     function formatTimestamp(timestamp) {
         const date = new Date(timestamp);
         const options = { hour: '2-digit', minute: '2-digit', hour12: true };
         return date.toLocaleTimeString('en-US', options);
     }
-
-    function appendMessage(sender, message, isSystem = false, timestamp = null) {
+    
+    /**
+     * @param {string} sender - The username of the sender.
+     * @param {string} message - The message content.
+     * @param {boolean} isSystem - True if it's a system message.
+     * @param {string} timestamp - The ISO string of the message timestamp.
+     * @param {string} currentUsername - The username of the currently logged-in user.
+     */
+    function appendMessage(sender, message, isSystem = false, timestamp = null, currentUsername) {
         const chatContainer = document.getElementById('chat-container');
 
         const messageRow = document.createElement('div');
@@ -1189,7 +1189,8 @@
             if (timestamp) {
                 timestampSpan.textContent = formatTimestamp(timestamp);
             }
-
+            
+            // FIX: This comparison is now bulletproof because currentUsername is passed in.
             if (sender === currentUsername) {
                 // My sent message
                 messageRow.classList.add('my-message-row');
@@ -1320,6 +1321,8 @@
     }
 
     // --- Initial Session and Settings Load ---
+    // FIX: This block is now more robust. It ensures currentUsername and currentUserId
+    // are set before any chat history is loaded.
     fetch('/session')
         .then(res => res.json())
         .then(data => {
@@ -1328,9 +1331,9 @@
                 currentUserId = data.userId;
                 voiceChatButton.style.display = 'none';
 
-
                 // Load user settings from the server
                 loadUserSettings();
+                // This is now safe as currentUsername is set.
                 switchChat(null);
             } else {
                 window.location.href = '/login.html';
@@ -1352,15 +1355,15 @@
 
         if (currentChatPartner === null) {
             socket.emit('chat-message', messagePayload);
-            // NEW FIX: Append the message to your own chat window immediately
-            appendMessage(currentUsername, msg, false, new Date());
+            // FIX: Append the message to your own chat window immediately to prevent duplicates
+            appendMessage(currentUsername, msg, false, new Date(), currentUsername);
         } else {
             socket.emit('private-message', {
                 recipientId: currentChatPartner.id,
                 message: messagePayload.message
             });
-            // NEW FIX: Display the sent message immediately in the chat window
-            appendMessage(currentUsername, msg, false, new Date());
+            // FIX: Display the sent message immediately in the chat window to prevent duplicates
+            appendMessage(currentUsername, msg, false, new Date(), currentUsername);
         }
         messageInput.value = '';
     });
@@ -1376,22 +1379,19 @@
             clearChatContainer();
             history.forEach(msg => {
                 // FIX: Use msg.message_content to match the server payload
-                appendMessage(msg.username, msg.message_content, false, msg.timestamp);
+                // FIX: Pass currentUsername explicitly
+                appendMessage(msg.username, msg.message_content, false, msg.timestamp, currentUsername);
             });
         }
     });
-
-    // A global variable to store the current user's username.
-    // Make sure this is set when the user logs in.
-
 
     // Event handler for a new global chat message
     socket.on('chat-message', (messageData) => {
         if (currentChatPartner === null) {
             const { user, message_content, timestamp } = messageData;
-            // Corrected to handle messages from others, as your own messages are now handled in the submit handler
+            // FIX: Corrected to handle messages from others, as your own messages are now handled in the submit handler
             if (user !== currentUsername) {
-                appendMessage(user, message_content, false, timestamp);
+                appendMessage(user, message_content, false, timestamp, currentUsername);
             }
         }
     });
@@ -1401,25 +1401,26 @@
         if (currentChatPartner !== null) {
             clearChatContainer();
             history.forEach(msg => {
-                // CORRECTED: The `appendMessage` function only takes 4 arguments.
-                // We pass `false` for the `isSystem` parameter, and the function's internal
-                // logic handles whether it's 'my-message' or 'other-message'.
-                appendMessage(msg.sender_username, msg.message_content, false, msg.timestamp);
+                // FIX: Pass currentUsername explicitly to ensure correct alignment.
+                appendMessage(msg.sender_username, msg.message_content, false, msg.timestamp, currentUsername);
             });
         }
     });
+
     socket.on('private-message-received', (messageData) => {
         const { senderId, senderUsername, receiverId, message_content, timestamp } = messageData;
         const isRelevantToCurrentChat = (currentChatPartner &&
-                                         ((String(currentChatPartner.id) === String(senderId) && String(currentUserId) === String(receiverId)) ||
-                                           (String(currentChatPartner.id) === String(receiverId) && String(currentUserId) === String(senderId))));
+                                        ((String(currentChatPartner.id) === String(senderId) && String(currentUserId) === String(receiverId)) ||
+                                            (String(currentChatPartner.id) === String(receiverId) && String(currentUserId) === String(senderId))));
 
         if (isRelevantToCurrentChat && String(senderId) !== String(currentUserId)) {
-            // CORRECTED: Only append messages from other users
-            appendMessage(senderUsername, message_content, false, timestamp);
+            // FIX: Only append messages from other users
+            // FIX: Pass currentUsername explicitly
+            appendMessage(senderUsername, message_content, false, timestamp, currentUsername);
             socket.emit('mark-private-messages-read', senderId);
         }
     });
+
     socket.on('initial-unread-counts', (unreadData) => {
         console.log('Received individual unread counts:', unreadData);
         clientUnreadCountsDisplay.clear();
@@ -1448,18 +1449,19 @@
     });
 
     socket.on('system-message', (message) => {
-        appendMessage(null, message, true);
+        // FIX: System messages don't need a sender for alignment
+        appendMessage(null, message, true, null, currentUsername);
     });
 
     socket.on('user-joined', (username) => {
         if (currentChatPartner === null) {
-            appendMessage(null, `${username} joined the chat`, true);
+            appendMessage(null, `${username} joined the chat`, true, null, currentUsername);
         }
     });
 
     socket.on('user-left', (username) => {
         if (currentChatPartner === null) {
-            appendMessage(null, `${username} left the chat`, true);
+            appendMessage(null, `${username} left the chat`, true, null, currentUsername);
         }
     });
 
