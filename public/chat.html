@@ -1375,28 +1375,27 @@ socket.on('chat-message', ({ user, message_content, timestamp }) => {
 });
 
 // Event handler for loading private chat history
-// Event handler for loading private chat history
 socket.on('private-history-loaded', (history) => {
-    // Only update private chat if a chat partner is selected
     if (currentChatPartner !== null) {
         clearChatContainer();
         history.forEach(msg => {
-            // FIX: Pass the msg.is_my_message flag to appendMessage
-            appendMessage(msg.sender_username, msg.message_content, msg.is_my_message, msg.timestamp);
+            // is_my_message flag is provided by the server for private chat
+            appendMessage(msg.sender_username, msg.message_content, msg.is_my_message, msg.timestamp, false);
         });
     }
 });
 
+// Event handler for a new private message being received or sent
 socket.on('private-message-received', (messageData) => {
-    const { senderId, senderUsername, receiverId, message_content, timestamp } = messageData;
+    const { senderId, senderUsername, receiverId, message_content, timestamp, is_my_message } = messageData;
 
     const isRelevantToCurrentChat = (currentChatPartner &&
                                       ((String(currentChatPartner.id) === String(senderId) && String(currentUserId) === String(receiverId)) ||
                                        (String(currentChatPartner.id) === String(receiverId) && String(currentUserId) === String(senderId))));
 
     if (isRelevantToCurrentChat) {
-        // This one was also already correct!
-        appendMessage(senderUsername, message_content, false, timestamp);
+        // is_my_message flag is provided by the server
+        appendMessage(senderUsername, message_content, is_my_message, timestamp, false);
         if (String(senderId) !== String(currentUserId)) {
             socket.emit('mark-private-messages-read', senderId);
         }
