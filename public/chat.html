@@ -7,7 +7,8 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon.jpg">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <link rel="manifest" href="/manifest.json">
- <style>
+    <link rel="apple-touch-icon" href="/path/to/your/favicon.jpg">
+<style>
         /* --- Global Resets & Base Styles --- */
         html, body {
             height: 100%;
@@ -1402,16 +1403,17 @@ socket.on('private-history-loaded', (history) => {
     }
 });
 
-// Event handler for a new private message being received or sent
 socket.on('private-message-received', (messageData) => {
     const { senderId, senderUsername, receiverId, message_content, timestamp, is_my_message } = messageData;
     const isRelevantToCurrentChat = (currentChatPartner &&
-                                      ((String(currentChatPartner.id) === String(senderId) && String(currentUserId) === String(receiverId)) ||
+                                     ((String(currentChatPartner.id) === String(senderId) && String(currentUserId) === String(receiverId)) ||
                                        (String(currentChatPartner.id) === String(receiverId) && String(currentUserId) === String(senderId))));
 
     if (isRelevantToCurrentChat) {
-        // The last parameter, isSystem, must be false for chat messages.
-        appendMessage(senderUsername, message_content, is_my_message, timestamp, false);
+        // Corrected call to appendMessage. 
+        // We pass 'false' for the isSystem parameter.
+        // The appendMessage function will handle the is_my_message logic internally.
+        appendMessage(senderUsername, message_content, false, timestamp);
         if (String(senderId) !== String(currentUserId)) {
             socket.emit('mark-private-messages-read', senderId);
         }
