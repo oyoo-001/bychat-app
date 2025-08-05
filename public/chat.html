@@ -1397,12 +1397,13 @@ socket.on('private-history-loaded', (history) => {
     if (currentChatPartner !== null) {
         clearChatContainer();
         history.forEach(msg => {
-            // The last parameter, isSystem, must be false for chat messages.
-            appendMessage(msg.sender_username, msg.message_content, msg.is_my_message, msg.timestamp, false);
+            // CORRECTED: The `appendMessage` function only takes 4 arguments.
+            // We pass `false` for the `isSystem` parameter, and the function's internal
+            // logic handles whether it's 'my-message' or 'other-message'.
+            appendMessage(msg.sender_username, msg.message_content, false, msg.timestamp);
         });
     }
 });
-
 socket.on('private-message-received', (messageData) => {
     const { senderId, senderUsername, receiverId, message_content, timestamp, is_my_message } = messageData;
     const isRelevantToCurrentChat = (currentChatPartner &&
