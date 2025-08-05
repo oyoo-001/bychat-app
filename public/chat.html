@@ -1157,7 +1157,16 @@ function formatTimestamp(isoString) {
     return `${hours}:${minutes}`;
 }
 
+// A simple helper function to format the timestamp
+function formatTimestamp(timestamp) {
+    const date = new Date(timestamp);
+    const options = { hour: '2-digit', minute: '2-digit', hour12: true };
+    return date.toLocaleTimeString('en-US', options);
+}
+
 function appendMessage(sender, message, isSystem = false, timestamp = null) {
+    const chatContainer = document.getElementById('chat-container');
+
     const messageRow = document.createElement('div');
     messageRow.classList.add('message-row');
 
@@ -1168,39 +1177,41 @@ function appendMessage(sender, message, isSystem = false, timestamp = null) {
         messageRow.classList.add('system-message-row');
         messageBubble.classList.add('system-message-bubble');
         messageBubble.textContent = message;
+        messageRow.appendChild(messageBubble);
     } else {
-        messageBubble.innerHTML = ''; // Clear the message bubble before appending the new message content
+        const messageContent = document.createElement('div');
+        messageContent.classList.add('message-content');
+        messageContent.textContent = message;
+
+        const timestampSpan = document.createElement('span');
+        timestampSpan.classList.add('message-timestamp');
+        if (timestamp) {
+            timestampSpan.textContent = formatTimestamp(timestamp);
+        }
+
         if (sender === currentUsername) {
+            // My sent message
             messageRow.classList.add('my-message-row');
             messageBubble.classList.add('my-message-bubble');
+            messageBubble.appendChild(messageContent);
+            messageBubble.appendChild(timestampSpan);
         } else {
+            // Other person's received message
             messageRow.classList.add('other-message-row');
             messageBubble.classList.add('other-message-bubble');
+            
             const senderSpan = document.createElement('span');
             senderSpan.classList.add('message-sender');
             senderSpan.textContent = sender;
-            messageBubble.prepend(senderSpan);
-        }
 
-        const messageContent = document.createElement('span');
-        messageContent.classList.add('message-content'); // <-- UPDATED TO 'message-content'
-
-        if (message) {
-            messageContent.textContent = message;
+            messageBubble.appendChild(senderSpan);
             messageBubble.appendChild(messageContent);
-        }
-
-        if (timestamp) {
-            const timestampSpan = document.createElement('span');
-            timestampSpan.classList.add('message-timestamp');
-            timestampSpan.textContent = formatTimestamp(timestamp);
             messageBubble.appendChild(timestampSpan);
         }
+        messageRow.appendChild(messageBubble);
     }
-
-    messageRow.appendChild(messageBubble);
+    
     chatContainer.appendChild(messageRow);
-
     chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
